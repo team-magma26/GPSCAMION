@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GPS Truck Tracker — Live</title>
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    background: #0d1b2a;
+    color: #ffffff;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding-top: 30px;
+    margin: 0;
+  }
+  h1 { font-size: 22px; color: #8ecae6; margin-bottom: 20px; }
+
+  #map {
+    width: 90%;
+    max-width: 900px;
+    height: 420px;
+    border-radius: 12px;
+    box-shadow: 0 4px 14px rgba(0,0,0,.4);
+    margin-bottom: 24px;
+  }
+
+  .card {
+    background: #1b263b;
+    padding: 24px 40px;
+    border-radius: 12px;
+    box-shadow: 0 4px 14px rgba(0,0,0,.4);
+    min-width: 280px;
+  }
+  .field {
+    display: flex;
+    justify-content: space-between;
+    margin: 12px 0;
+    font-size: 18px;
+    border-bottom: 1px solid #2a3a55;
+    padding-bottom: 8px;
+    gap: 30px;
+  }
+  .label { color: #8ecae6; font-weight: bold; }
+  .value { font-family: "Courier New", monospace; font-size: 18px; }
+  .status { margin: 16px 0 30px; font-size: 13px; color: #6c7a91; }
+  .dot {
+    display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+    background: #6c7a91; margin-right: 6px;
+  }
+  .dot.live { background: #2ecc71; }
+</style>
+</head>
+<body>
+
+<h1>Live Truck Location</h1>
+
+<div id="map"></div>
+
+<div class="card">
+  <div class="field"><span class="label">Latitude:</span><span class="value" id="lat">--</span></div>
+  <div class="field"><span class="label">Longitude:</span><span class="value" id="lon">--</span></div>
+  <div class="field"><span class="label">Date:</span><span class="value" id="date">--</span></div>
+  <div class="field"><span class="label">Time:</span><span class="value" id="time">--</span></div>
+</div>
+
+<div class="status"><span class="dot" id="dot"></span><span id="status">Connecting…</span></div>
+
+<script>
+  // ------------------------------------------------------------
+  // Mapa base (OpenStreetMap, sin API key)
+  // ------------------------------------------------------------
+  const map = L.map("map").setView([4.6, -74.08], 13); // vista inicial de respaldo
+
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 19,
+    attribution: "&copy; OpenStreetMap contributors",
+  }).addTo(map);
+
+  const marker = L.marker([4.6, -74.08]).addTo(map);
+  const polyline = L.polyline([], { color: "#2ecc71", weight: 4 }).addTo(map);
+
+  let mapCentered = false; // solo centramos automáticamente la primera vez
+
+  // ------------------------------------------------------------
+  // Campos de texto (igual que antes, se actualizan independientemente)
+  // ------------------------------------------------------------
+  function updateFields(data) {
+    document.getElementById("lat").textContent  = data.lat  !== null ? data.lat  : "--";
+    document.getElementById("lon").textContent  = data.lon  !== null ? data.lon  : "--";
+    document.getElementById("date").textContent = data.date !== null ? data.date : "--";
+    document.getElementById("time").textContent = data.time !== null ? data.time : "--";
+    document.getElementById("status").textContent = "Live — last update " + new Date().toLocaleTimeString();
+    document.getElementById("dot").classList.add("live");
+  }
+
+  // Mueve el marcador y extiende la línea del recorrido
+  function updateMap(lat, lon) {
+    const point = [lat, lon];
+    marker.setLatLng(point);
+    polyline.addLatLng(point);
+
+    if (!mapCentered) {
+      map.setView(point, 15);
+      mapCentered = true;
+    }
+  }
+
+  // ------------------------------------------------------------
+  // 1) Al cargar la página: traer el historial completo y dibujar
+  //    la línea del recorrido ya hecho hasta ahora.
+  // ------------------------------------------------------------
+  fetch("/api/history")
+    .then((r) => r.json())
+    .then((points) => {
+      const latlngs = points.map((p) => [p.lat, p.lon]);
+      polyline.setLatLngs(latlngs);
+      if (latlngs.length > 0) {
+        const last = latlngs[latlngs.length - 1];
+        marker.setLatLng(last);
+        map.setView(last, 15);
+        mapCentered = true;
+      }
+    })
+    .catch((e) => console.error("No se pudo cargar el historial:", e));
+
+  fetch("/api/latest")
+    .then((r) => r.json())
+    .then(updateFields)
+    .catch(() => {});
+
+  // ------------------------------------------------------------
+  // 2) Suscripción en tiempo real (Server-Sent Events)
+  // ------------------------------------------------------------
+  const source = new EventSource("/events");
+
+  source.onmessage = (event) => {
+    const data = JSON.parse(event.data);
+    updateFields(data);
+    if (data.lat !== null && data.lon !== null) {
+      updateMap(data.lat, data.lon);
+    }
+  };
+
+  source.onerror = () => {
+    document.getElementById("dot").classList.remove("live");
+    document.getElementById("status").textContent = "Connection lost — retrying…";
+  };
+</script>
+
+</body>
+</html>

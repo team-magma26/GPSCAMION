@@ -54,11 +54,27 @@
     background: #6c7a91; margin-right: 6px;
   }
   .dot.live { background: #2ecc71; }
+
+  .follow-toggle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 12px;
+    font-size: 14px;
+    color: #8ecae6;
+    user-select: none;
+    cursor: pointer;
+  }
 </style>
 </head>
 <body>
 
 <h1>Live Truck Location</h1>
+
+<label class="follow-toggle">
+  <input type="checkbox" id="followToggle" checked>
+  Seguir camión
+</label>
 
 <div id="map"></div>
 
@@ -72,10 +88,8 @@
 <div class="status"><span class="dot" id="dot"></span><span id="status">Connecting…</span></div>
 
 <script>
-  // ------------------------------------------------------------
-  // Mapa base (OpenStreetMap, sin API key)
-  // ------------------------------------------------------------
-  const map = L.map("map").setView([4.6, -74.08], 13); // vista inicial de respaldo
+ 
+  const map = L.map("map").setView([4.6, -74.08], 13); 
 
   L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
     maxZoom: 19,
@@ -83,13 +97,26 @@
   }).addTo(map);
 
   const marker = L.marker([4.6, -74.08]).addTo(map);
-  const polyline = L.polyline([], { color: "#2ecc71", weight: 4 }).addTo(map);
 
-  let mapCentered = false; // solo centramos automáticamente la primera vez
+  let mapCentered = false; 
+  let followTruck = true;  
 
-  // ------------------------------------------------------------
-  // Campos de texto (igual que antes, se actualizan independientemente)
-  // ------------------------------------------------------------
+  const followToggle = document.getElementById("followToggle");
+  followToggle.addEventListener("change", () => {
+    followTruck = followToggle.checked;
+
+    if (followTruck) {
+      map.panTo(marker.getLatLng());
+    }
+  });
+
+
+  map.on("dragstart", () => {
+    followTruck = false;
+    followToggle.checked = false;
+  });
+
+  
   function updateFields(data) {
     document.getElementById("lat").textContent  = data.lat  !== null ? data.lat  : "--";
     document.getElementById("lon").textContent  = data.lon  !== null ? data.lon  : "--";
@@ -99,44 +126,29 @@
     document.getElementById("dot").classList.add("live");
   }
 
-  // Mueve el marcador y extiende la línea del recorrido
   function updateMap(lat, lon) {
     const point = [lat, lon];
     marker.setLatLng(point);
-    polyline.addLatLng(point);
 
     if (!mapCentered) {
       map.setView(point, 15);
       mapCentered = true;
+    } else if (followTruck) {
+      map.panTo(point, { animate: true, duration: 0.5 });
     }
   }
 
-  // ------------------------------------------------------------
-  // 1) Al cargar la página: traer el historial completo y dibujar
-  //    la línea del recorrido ya hecho hasta ahora.
-  // ------------------------------------------------------------
-  fetch("/api/history")
-    .then((r) => r.json())
-    .then((points) => {
-      const latlngs = points.map((p) => [p.lat, p.lon]);
-      polyline.setLatLngs(latlngs);
-      if (latlngs.length > 0) {
-        const last = latlngs[latlngs.length - 1];
-        marker.setLatLng(last);
-        map.setView(last, 15);
-        mapCentered = true;
-      }
-    })
-    .catch((e) => console.error("No se pudo cargar el historial:", e));
-
   fetch("/api/latest")
     .then((r) => r.json())
-    .then(updateFields)
+    .then((data) => {
+      updateFields(data);
+      if (data.lat !== null && data.lon !== null) {
+        updateMap(data.lat, data.lon);
+      }
+    })
     .catch(() => {});
 
-  // ------------------------------------------------------------
-  // 2) Suscripción en tiempo real (Server-Sent Events)
-  // ------------------------------------------------------------
+
   const source = new EventSource("/events");
 
   source.onmessage = (event) => {

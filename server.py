@@ -21,20 +21,23 @@ DB_PASSWORD = os.environ["DB_PASSWORD"]
 DB_SSLMODE = os.environ.get("DB_SSLMODE", "require")
 
 
-ACCOUNT_ID = os.environ["ACCOUNT_ID"]  
-
+WRITER_ACCOUNT_ID = "main"
 
 NOTIFY_CHANNEL = "new_location"
 
 db_lock = threading.Lock()
 
-parser = argparse.ArgumentParser(description="GPS tracking UDP sniffer + web server (Postgres compartida + SSE, multi-cuenta)")
+parser = argparse.ArgumentParser(description="GPS tracking: 1 writer (UDP+insert) + N readers (solo lectura)")
+parser.add_argument("--role", choices=["writer", "reader"], required=True,
+                     help="writer = recibe UDP e inserta a la RDS. reader = solo lee/muestra.")
 parser.add_argument("--udp-port", type=int, default=5000)
 parser.add_argument("--http-port", type=int, default=8000)
 args = parser.parse_args()
 
+ROLE = args.role
 UDP_PORT = args.udp_port
 HTTP_PORT = args.http_port
+IS_WRITER = ROLE == "writer"
 
 
 def get_connection():
@@ -47,7 +50,6 @@ def get_connection():
 def init_db():
     conn = get_connection()
     cur = conn.cursor()
-    # Tabla compartida entre las 3 cuentas, con account_id para separar los datos
     cur.execute(
         """
         CREATE TABLE IF NOT EXISTS locations (
@@ -75,11 +77,11 @@ def save_location(lat: float, lon: float, gps_time: str):
         cur = conn.cursor()
         cur.execute(
             "INSERT INTO locations (account_id, lat, lon, gps_time, received_at) VALUES (%s, %s, %s, %s, %s)",
-            (ACCOUNT_ID, lat, lon, gps_time, received_at),
+            (WRITER_ACCOUNT_ID, lat, lon, gps_time, received_at),
         )
         cur.execute(
             f"NOTIFY {NOTIFY_CHANNEL}, %s",
-            (json.dumps(location_to_payload(ACCOUNT_ID, lat, lon, gps_time)),)
+            (json.dumps(location_to_payload(lat, lon, gps_time)),)
         )
         conn.commit()
         cur.close()
@@ -87,13 +89,11 @@ def save_location(lat: float, lon: float, gps_time: str):
 
 
 def get_latest_location():
+    
     with db_lock:
         conn = get_connection()
         cur = conn.cursor()
-        cur.execute(
-            "SELECT lat, lon, gps_time FROM locations WHERE account_id = %s ORDER BY id DESC LIMIT 1",
-            (ACCOUNT_ID,),
-        )
+        cur.execute("SELECT lat, lon, gps_time FROM locations ORDER BY id DESC LIMIT 1")
         row = cur.fetchone()
         cur.close()
         conn.close()
@@ -104,10 +104,7 @@ def get_history(limit: int = 1000):
     with db_lock:
         conn = get_connection()
         cur = conn.cursor()
-        cur.execute(
-            "SELECT lat, lon, gps_time FROM locations WHERE account_id = %s ORDER BY id DESC LIMIT %s",
-            (ACCOUNT_ID, limit),
-        )
+        cur.execute("SELECT lat, lon, gps_time FROM locations ORDER BY id DESC LIMIT %s", (limit,))
         rows = cur.fetchall()
         cur.close()
         conn.close()
@@ -124,9 +121,9 @@ def broadcast(payload: dict):
             q.put(payload)
 
 
-def location_to_payload(account_id, lat, lon, gps_time):
+def location_to_payload(lat, lon, gps_time):
     date_part, _, time_part = gps_time.partition(" ")
-    return {"account_id": account_id, "lat": lat, "lon": lon, "date": date_part, "time": time_part}
+    return {"lat": lat, "lon": lon, "date": date_part, "time": time_part}
 
 
 def parse_message(raw: str):
@@ -142,34 +139,34 @@ def parse_message(raw: str):
 
 
 def udp_listener():
+    
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.bind(("0.0.0.0", UDP_PORT))
-    print(f"[UDP] ({ACCOUNT_ID}) Sniffer listening on 0.0.0.0:{UDP_PORT}")
+    print(f"[UDP] (writer) Sniffer listening on 0.0.0.0:{UDP_PORT}")
     while True:
         try:
             data, addr = sock.recvfrom(1024)
             raw = data.decode("utf-8", errors="ignore")
             lat, lon, gps_time = parse_message(raw)
             save_location(lat, lon, gps_time)
-            print(f"[UDP] ({ACCOUNT_ID}) {addr[0]} -> lat={lat} lon={lon} time={gps_time}")
+            print(f"[UDP] (writer) {addr[0]} -> lat={lat} lon={lon} time={gps_time}")
         except Exception as exc:
-            print(f"[UDP] ({ACCOUNT_ID}) Ignored malformed packet: {exc}")
+            print(f"[UDP] (writer) Ignored malformed packet: {exc}")
 
 
 def listen_notifications():
+    
     conn = get_connection()
     conn.set_isolation_level(extensions.ISOLATION_LEVEL_AUTOCOMMIT)
     cur = conn.cursor()
     cur.execute(f"LISTEN {NOTIFY_CHANNEL};")
-    print(f"[DB] ({ACCOUNT_ID}) Listening on shared channel '{NOTIFY_CHANNEL}', filtering for this account")
+    print(f"[DB] ({ROLE}) Listening on '{NOTIFY_CHANNEL}'")
     while True:
         conn.poll()
         while conn.notifies:
             notify = conn.notifies.pop(0)
             payload = json.loads(notify.payload)
-            # La RDS es compartida por las 3 cuentas: solo re-emitimos lo nuestro
-            if payload.get("account_id") == ACCOUNT_ID:
-                broadcast(payload)
+            broadcast(payload)
 
 
 app = Flask(__name__)
@@ -177,7 +174,7 @@ app = Flask(__name__)
 
 @app.route("/")
 def index():
-    return render_template("index.html", account_id=ACCOUNT_ID)
+    return render_template("index.html", role=ROLE)
 
 
 @app.route("/api/latest")
@@ -186,7 +183,7 @@ def api_latest():
     if row is None:
         return jsonify({"lat": None, "lon": None, "date": None, "time": None})
     lat, lon, gps_time = row
-    return jsonify(location_to_payload(ACCOUNT_ID, lat, lon, gps_time))
+    return jsonify(location_to_payload(lat, lon, gps_time))
 
 
 @app.route("/api/history")
@@ -216,8 +213,9 @@ def events():
 
 
 if __name__ == "__main__":
-    init_db()
-    threading.Thread(target=udp_listener, daemon=True).start()
+    if IS_WRITER:
+        init_db()
+        threading.Thread(target=udp_listener, daemon=True).start()
     threading.Thread(target=listen_notifications, daemon=True).start()
-    print(f"[HTTP] ({ACCOUNT_ID}) Web page at http://0.0.0.0:{HTTP_PORT} (UDP port: {UDP_PORT}, DB: {DB_NAME}@{DB_HOST})")
+    print(f"[HTTP] ({ROLE}) Web page at http://0.0.0.0:{HTTP_PORT} (DB: {DB_NAME}@{DB_HOST})")
     app.run(host="0.0.0.0", port=HTTP_PORT, threaded=True)

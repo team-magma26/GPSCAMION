@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>GPS Truck Tracker — Live</title>
+<title>{{ app_name }} — Live</title>
 
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -19,7 +19,8 @@
     padding-top: 30px;
     margin: 0;
   }
-  h1 { font-size: 22px; color: #8ecae6; margin-bottom: 20px; }
+  h1 { font-size: 22px; color: #8ecae6; margin-bottom: 4px; }
+  .subtitle { font-size: 12px; color: #6c7a91; margin-bottom: 20px; }
 
   #map {
     width: 90%;
@@ -55,26 +56,45 @@
   }
   .dot.live { background: #2ecc71; }
 
-  .follow-toggle {
+  .toolbar {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 20px;
     margin-bottom: 12px;
     font-size: 14px;
     color: #8ecae6;
+  }
+  .toolbar label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
     user-select: none;
     cursor: pointer;
   }
+  .toolbar button {
+    background: #2a3a55;
+    color: #8ecae6;
+    border: none;
+    border-radius: 6px;
+    padding: 6px 12px;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  .toolbar button:hover { background: #33456a; }
 </style>
 </head>
 <body>
 
-<h1>Live Truck Location</h1>
+<h1>{{ app_name }}</h1>
+<div class="subtitle">modo: {{ role }}</div>
 
-<label class="follow-toggle">
-  <input type="checkbox" id="followToggle" checked>
-  Seguir camión
-</label>
+<div class="toolbar">
+  <label>
+    <input type="checkbox" id="followToggle" checked>
+    Seguir camión
+  </label>
+  <button id="clearTrail">Limpiar recorrido</button>
+</div>
 
 <div id="map"></div>
 
@@ -88,8 +108,8 @@
 <div class="status"><span class="dot" id="dot"></span><span id="status">Connecting…</span></div>
 
 <script>
- 
-  const map = L.map("map").setView([4.6, -74.08], 13); 
+
+  const map = L.map("map").setView([4.6, -74.08], 13);
 
   L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
     maxZoom: 19,
@@ -98,8 +118,11 @@
 
   const marker = L.marker([4.6, -74.08]).addTo(map);
 
-  let mapCentered = false; 
-  let followTruck = true;  
+  // Polilínea que va trazando el recorrido real del vehículo en tiempo real.
+  const trail = L.polyline([], { color: "#2ecc71", weight: 4, opacity: 0.85 }).addTo(map);
+
+  let mapCentered = false;
+  let followTruck = true;
 
   const followToggle = document.getElementById("followToggle");
   followToggle.addEventListener("change", () => {
@@ -110,13 +133,15 @@
     }
   });
 
-
   map.on("dragstart", () => {
     followTruck = false;
     followToggle.checked = false;
   });
 
-  
+  document.getElementById("clearTrail").addEventListener("click", () => {
+    trail.setLatLngs([]);
+  });
+
   function updateFields(data) {
     document.getElementById("lat").textContent  = data.lat  !== null ? data.lat  : "--";
     document.getElementById("lon").textContent  = data.lon  !== null ? data.lon  : "--";
@@ -126,9 +151,13 @@
     document.getElementById("dot").classList.add("live");
   }
 
-  function updateMap(lat, lon) {
+  function updateMap(lat, lon, addToTrail = true) {
     const point = [lat, lon];
     marker.setLatLng(point);
+
+    if (addToTrail) {
+      trail.addLatLng(point);
+    }
 
     if (!mapCentered) {
       map.setView(point, 15);
@@ -138,24 +167,51 @@
     }
   }
 
+  // 1) Cargar el historial para dibujar el recorrido ya hecho antes de conectarnos en vivo.
+  fetch("/api/history")
+    .then((r) => r.json())
+    .then((points) => {
+      const latlngs = points.map((p) => [p.lat, p.lon]);
+      trail.setLatLngs(latlngs);
+      if (latlngs.length > 0) {
+        const last = latlngs[latlngs.length - 1];
+        marker.setLatLng(last);
+        map.fitBounds(trail.getBounds(), { maxZoom: 15, padding: [20, 20] });
+        mapCentered = true;
+      }
+    })
+    .catch(() => {});
+
+  // 2) Traer el último dato conocido para los campos de texto.
   fetch("/api/latest")
     .then((r) => r.json())
     .then((data) => {
       updateFields(data);
       if (data.lat !== null && data.lon !== null) {
-        updateMap(data.lat, data.lon);
+        // No lo volvemos a añadir al trail: ya vino incluido en /api/history.
+        updateMap(data.lat, data.lon, false);
       }
     })
     .catch(() => {});
 
-
+  // 3) Suscribirse a las actualizaciones en vivo (Server-Sent Events) y extender el recorrido.
   const source = new EventSource("/events");
 
   source.onmessage = (event) => {
     const data = JSON.parse(event.data);
+
+    // El writer se reinició: empieza una sesión/recorrido nuevo.
+    // Borramos el trazo aunque la página ya estuviera abierta, sin recargar.
+    if (data.type === "session_start") {
+      trail.setLatLngs([]);
+      mapCentered = false;
+      document.getElementById("status").textContent = "Nueva sesión de recorrido iniciada";
+      return;
+    }
+
     updateFields(data);
     if (data.lat !== null && data.lon !== null) {
-      updateMap(data.lat, data.lon);
+      updateMap(data.lat, data.lon, true);
     }
   };
 

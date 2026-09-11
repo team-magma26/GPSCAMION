@@ -1,0 +1,42 @@
+name: Deploy to EC2 instances
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy-writer-main:
+    runs-on: writer-main
+    steps:
+      - name: Pull and restart
+        run: |
+          cd ~/GPSCAMION
+          git pull origin main
+          sudo systemctl restart GPSCAMION
+
+  deploy-reader-1:
+    runs-on: reader-1
+    steps:
+      - name: Pull and restart
+        run: |
+          cd ~/GPSCAMION
+          git pull origin main
+          sudo systemctl restart GPSCAMION
+
+  deploy-reader-2:
+    runs-on: reader-2
+    steps:
+      - name: Pull and restart
+        run: |
+          cd ~/GPSCAMION
+          git pull origin main
+          sudo systemctl restart GPSCAMION
+
+  deploy-reader-3:
+    runs-on: reader-3
+    steps:
+      - name: Pull and restart
+        run: |
+          cd ~/GPSCAMION
+          git pull origin main
+          sudo systemctl restart GPSCAMION

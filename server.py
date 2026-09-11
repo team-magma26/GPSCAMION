@@ -4,6 +4,7 @@ import os
 import queue
 import socket
 import threading
+import uuid
 from datetime import datetime
 
 import psycopg2
@@ -21,12 +22,26 @@ DB_USER = os.environ["DB_USER"]
 DB_PASSWORD = os.environ["DB_PASSWORD"]
 DB_SSLMODE = os.environ.get("DB_SSLMODE", "require")
 
+# Nombre visible de la página, configurable desde .env (ej: APP_NAME="Flota Norte - GPS")
+APP_NAME = os.environ.get("APP_NAME", "GPS Truck Tracker")
 
 WRITER_ACCOUNT_ID = "main"
 
 NOTIFY_CHANNEL = "new_location"
 
 db_lock = threading.Lock()
+
+# Umbral de silencio del GPS para considerar que empieza un recorrido nuevo.
+# Si pasan más de este tiempo sin recibir un paquete UDP, el próximo paquete
+# que llegue abre una sesión nueva (y el mapa borra el trazo anterior).
+SESSION_GAP_SECONDS = 60
+
+session_lock = threading.Lock()
+# Estado en memoria del proceso writer: cuándo llegó el último paquete UDP
+# y cuál es la sesión (recorrido) activa en este momento. No depende de que
+# el servidor Flask se reinicie — depende de que el camión deje de transmitir.
+_last_packet_dt = None
+_active_session_id = None
 
 parser = argparse.ArgumentParser(description="GPS tracking: 1 writer (UDP+insert) + N readers (solo lectura)")
 parser.add_argument("--role", choices=["writer", "reader"], required=True,
@@ -63,22 +78,132 @@ def init_db():
         )
         """
     )
+    # Migración: si la tabla ya existía de antes (sin session_id), la agrega
+    # sin tocar los datos que ya había.
+    cur.execute("ALTER TABLE locations ADD COLUMN IF NOT EXISTS session_id TEXT")
     cur.execute(
         "CREATE INDEX IF NOT EXISTS idx_locations_account_id ON locations (account_id, id DESC)"
+    )
+    cur.execute(
+        "CREATE INDEX IF NOT EXISTS idx_locations_session_id ON locations (session_id, id ASC)"
+    )
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS sessions (
+            id SERIAL PRIMARY KEY,
+            session_id TEXT NOT NULL UNIQUE,
+            started_at TEXT NOT NULL
+        )
+        """
     )
     conn.commit()
     cur.close()
     conn.close()
 
 
+def start_new_session() -> str:
+    """Registra un nuevo recorrido y devuelve su session_id.
+    Todo lo que se inserte después de esto queda "marcado" con esta sesión,
+    así el mapa puede trazar solo el recorrido actual."""
+    session_id = datetime.now().strftime("%Y%m%d-%H%M%S") + "-" + uuid.uuid4().hex[:6]
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(
+        "INSERT INTO sessions (session_id, started_at) VALUES (%s, %s)",
+        (session_id, datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
+    )
+    conn.commit()
+    cur.close()
+    conn.close()
+    return session_id
+
+
+def get_current_session_id():
+    """Sesión más reciente registrada, la consulta cualquier proceso
+    (writer o reader) directamente contra la BD — no depende de que sea
+    el mismo proceso que la creó."""
+    with db_lock:
+        conn = get_connection()
+        cur = conn.cursor()
+        cur.execute("SELECT session_id FROM sessions ORDER BY id DESC LIMIT 1")
+        row = cur.fetchone()
+        cur.close()
+        conn.close()
+    return row[0] if row else None
+
+
+def get_last_received_at():
+    """received_at del último punto guardado en toda la tabla, para saber
+    cuánto tiempo llevaba el GPS callado la última vez que corrió el writer."""
+    with db_lock:
+        conn = get_connection()
+        cur = conn.cursor()
+        cur.execute("SELECT received_at FROM locations ORDER BY id DESC LIMIT 1")
+        row = cur.fetchone()
+        cur.close()
+        conn.close()
+    return row[0] if row else None
+
+
+def notify_session_start(session_id: str):
+    """Avisa en vivo (vía LISTEN/NOTIFY) a todas las páginas ya abiertas que
+    empezó una sesión nueva, para que borren el trazo sin necesidad de
+    recargar la página."""
+    conn = get_connection()
+    conn.set_isolation_level(extensions.ISOLATION_LEVEL_AUTOCOMMIT)
+    cur = conn.cursor()
+    cur.execute(
+        f"NOTIFY {NOTIFY_CHANNEL}, %s",
+        (json.dumps({"type": "session_start", "session_id": session_id}),),
+    )
+    cur.close()
+    conn.close()
+
+
+def init_session_tracking():
+    """Se llama una vez al arrancar el writer. Retoma la sesión activa si el
+    último paquete llegó hace poco, o abre una sesión nueva si no hay
+    ninguna todavía o si el silencio ya superó SESSION_GAP_SECONDS."""
+    global _last_packet_dt, _active_session_id
+
+    existing_session_id = get_current_session_id()
+    last_received_at = get_last_received_at()
+
+    if existing_session_id is None:
+        _active_session_id = start_new_session()
+        notify_session_start(_active_session_id)
+        _last_packet_dt = None
+        return
+
+    _active_session_id = existing_session_id
+    _last_packet_dt = (
+        datetime.strptime(last_received_at, "%Y-%m-%d %H:%M:%S")
+        if last_received_at else None
+    )
+
+
 def save_location(lat: float, lon: float, gps_time: str):
-    received_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    global _last_packet_dt, _active_session_id
+
+    received_at_dt = datetime.now()
+    received_at = received_at_dt.strftime("%Y-%m-%d %H:%M:%S")
+
+    # Decide si este paquete pertenece al recorrido actual o si abre uno
+    # nuevo, según cuánto tiempo pasó desde el último paquete recibido.
+    with session_lock:
+        if _last_packet_dt is None or (received_at_dt - _last_packet_dt).total_seconds() > SESSION_GAP_SECONDS:
+            _active_session_id = start_new_session()
+            notify_session_start(_active_session_id)
+        _last_packet_dt = received_at_dt
+        session_id = _active_session_id
+
     with db_lock:
         conn = get_connection()
         cur = conn.cursor()
         cur.execute(
-            "INSERT INTO locations (account_id, lat, lon, gps_time, received_at) VALUES (%s, %s, %s, %s, %s)",
-            (WRITER_ACCOUNT_ID, lat, lon, gps_time, received_at),
+            "INSERT INTO locations (account_id, session_id, lat, lon, gps_time, received_at) "
+            "VALUES (%s, %s, %s, %s, %s, %s)",
+            (WRITER_ACCOUNT_ID, session_id, lat, lon, gps_time, received_at),
         )
         cur.execute(
             f"NOTIFY {NOTIFY_CHANNEL}, %s",
@@ -90,7 +215,7 @@ def save_location(lat: float, lon: float, gps_time: str):
 
 
 def get_latest_location():
-    
+
     with db_lock:
         conn = get_connection()
         cur = conn.cursor()
@@ -102,10 +227,21 @@ def get_latest_location():
 
 
 def get_history(limit: int = 1000):
+    """Recorrido de la sesión actual únicamente (el historial completo sigue
+    intacto en la tabla, solo no se muestra en el mapa)."""
+    session_id = get_current_session_id()
     with db_lock:
         conn = get_connection()
         cur = conn.cursor()
-        cur.execute("SELECT lat, lon, gps_time FROM locations ORDER BY id DESC LIMIT %s", (limit,))
+        if session_id:
+            cur.execute(
+                "SELECT lat, lon, gps_time FROM locations WHERE session_id = %s ORDER BY id DESC LIMIT %s",
+                (session_id, limit),
+            )
+        else:
+            # Compatibilidad: si aún no hay ninguna sesión registrada (ej.
+            # datos viejos previos a este cambio), no filtra.
+            cur.execute("SELECT lat, lon, gps_time FROM locations ORDER BY id DESC LIMIT %s", (limit,))
         rows = cur.fetchall()
         cur.close()
         conn.close()
@@ -124,7 +260,7 @@ def broadcast(payload: dict):
 
 def location_to_payload(lat, lon, gps_time):
     date_part, _, time_part = gps_time.partition(" ")
-    return {"lat": lat, "lon": lon, "date": date_part, "time": time_part}
+    return {"type": "location", "lat": lat, "lon": lon, "date": date_part, "time": time_part}
 
 
 def parse_message(raw: str):
@@ -140,7 +276,7 @@ def parse_message(raw: str):
 
 
 def udp_listener():
-    
+
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.bind(("0.0.0.0", UDP_PORT))
     print(f"[UDP] (writer) Sniffer listening on 0.0.0.0:{UDP_PORT}")
@@ -156,7 +292,7 @@ def udp_listener():
 
 
 def listen_notifications():
-    
+
     conn = get_connection()
     conn.set_isolation_level(extensions.ISOLATION_LEVEL_AUTOCOMMIT)
     cur = conn.cursor()
@@ -175,7 +311,7 @@ app = Flask(__name__)
 
 @app.route("/")
 def index():
-    return render_template("index.html", role=ROLE)
+    return render_template("index.html", role=ROLE, app_name=APP_NAME)
 
 
 @app.route("/api/latest")
@@ -185,6 +321,11 @@ def api_latest():
         return jsonify({"lat": None, "lon": None, "date": None, "time": None})
     lat, lon, gps_time = row
     return jsonify(location_to_payload(lat, lon, gps_time))
+
+
+@app.route("/api/session")
+def api_session():
+    return jsonify({"session_id": get_current_session_id()})
 
 
 @app.route("/api/history")
@@ -216,7 +357,9 @@ def events():
 if __name__ == "__main__":
     if IS_WRITER:
         init_db()
+        init_session_tracking()
+        print(f"[DB] (writer) Sesión activa: {_active_session_id}")
         threading.Thread(target=udp_listener, daemon=True).start()
     threading.Thread(target=listen_notifications, daemon=True).start()
-    print(f"[HTTP] ({ROLE}) Web page at http://0.0.0.0:{HTTP_PORT} (DB: {DB_NAME}@{DB_HOST})")
+    print(f"[HTTP] ({ROLE}) '{APP_NAME}' en http://0.0.0.0:{HTTP_PORT} (DB: {DB_NAME}@{DB_HOST})")
     app.run(host="0.0.0.0", port=HTTP_PORT, threaded=True)

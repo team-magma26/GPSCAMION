@@ -13,6 +13,7 @@ from dotenv import load_dotenv
 from flask import Flask, Response, jsonify, render_template
 
 load_dotenv()
+#esto es una prueba para ver si se actualiza solo 
 
 DB_HOST = os.environ["DB_HOST"]
 DB_PORT = os.environ.get("DB_PORT", "5432")

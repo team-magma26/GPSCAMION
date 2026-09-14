@@ -1,0 +1,42 @@
+name: Deploy to TEST environment
+
+on:
+  push:
+    branches: [test]
+
+jobs:
+  deploy-writer-test:
+    runs-on: writer-main
+    steps:
+      - name: Pull and restart (test)
+        run: |
+          cd ~/GPSCAMION-test
+          git pull origin test
+          sudo systemctl restart GPSCAMION-test
+
+  deploy-reader-1-test:
+    runs-on: reader-1
+    steps:
+      - name: Pull and restart (test)
+        run: |
+          cd ~/GPSCAMION-test
+          git pull origin test
+          sudo systemctl restart GPSCAMION-test
+
+  deploy-reader-2-test:
+    runs-on: reader-2
+    steps:
+      - name: Pull and restart (test)
+        run: |
+          cd ~/GPSCAMION-test
+          git pull origin test
+          sudo systemctl restart GPSCAMION-test
+
+  deploy-reader-3-test:
+    runs-on: reader-3
+    steps:
+      - name: Pull and restart (test)
+        run: |
+          cd ~/GPSCAMION-test
+          git pull origin test
+          sudo systemctl restart GPSCAMION-test

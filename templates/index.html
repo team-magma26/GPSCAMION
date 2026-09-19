@@ -7,136 +7,131 @@
 
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
 
 <style>
   :root {
-    --bg: #0b1620;
-    --surface: #132434;
-    --surface-raised: #172a3c;
-    --border: #223749;
-    --text: #eef3f6;
-    --text-muted: #7d94a6;
-    --accent-live: #4fd8c4;
-    --accent-live-dim: rgba(79, 216, 196, 0.15);
-    --accent-history: #f2a65a;
-    --accent-history-dim: rgba(242, 166, 90, 0.15);
-    --shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+    --bg: #0d1b2a;
+    --card: #1b263b;
+    --border: #2a3a55;
+    --accent: #8ecae6;
+    --accent-soft: rgba(142, 202, 230, 0.12);
+    --muted: #6c7a91;
+    --live: #2ecc71;
+    --history: #f4a261;
+    --history-soft: rgba(244, 162, 97, 0.14);
   }
 
   * { box-sizing: border-box; }
 
   body {
     font-family: Arial, sans-serif;
-    background: #0d1b2a;
-    color: #ffffff;
-    font-family: "Inter", -apple-system, sans-serif;
     background: var(--bg);
-    color: var(--text);
+    color: #ffffff;
     display: flex;
     flex-direction: column;
     align-items: center;
-    padding: 36px 20px 48px;
+    padding-top: 30px;
     margin: 0;
   }
 
-  header {
-    text-align: center;
-    margin-bottom: 24px;
+  h1 { font-size: 24px; color: var(--accent); margin: 0 0 4px; }
+  .subtitle { font-size: 12px; color: var(--muted); margin-bottom: 22px; }
+
+  #map {
+    width: 94%;
+    max-width: 1100px;
+    height: 560px;
+    border-radius: 12px;
+    box-shadow: 0 4px 14px rgba(0,0,0,.4);
+    margin-bottom: 22px;
   }
 
-  h1 {
-    font-size: 24px;
-    font-weight: 600;
-    letter-spacing: -0.01em;
-    color: var(--text);
-    margin: 0 0 6px;
+  .card {
+    background: var(--card);
+    padding: 24px 40px;
+    border-radius: 12px;
+    box-shadow: 0 4px 14px rgba(0,0,0,.4);
+    min-width: 280px;
   }
-
-  .subtitle {
+  .field {
+    display: flex;
+    justify-content: space-between;
+    margin: 12px 0;
+    font-size: 18px;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 8px;
+    gap: 30px;
+  }
+  .field:last-child { border-bottom: none; margin-bottom: 0; }
+  .label { color: var(--accent); font-weight: bold; }
+  .value { font-family: "Courier New", monospace; font-size: 18px; }
+  .status {
+    display: flex;
+    align-items: center;
+    margin: 16px 0 30px;
     font-size: 13px;
-    color: var(--text-muted);
+    color: var(--muted);
   }
+  .dot {
+    display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+    background: var(--muted); margin-right: 6px;
+  }
+  .dot.live { background: var(--live); }
 
-  .panel {
-    width: 90%;
-    max-width: 900px;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 14px;
-    padding: 14px 18px;
-    margin-bottom: 16px;
+  .toolbar {
+    width: 94%;
+    max-width: 1100px;
+    background: var(--card);
+    border-radius: 12px;
+    box-shadow: 0 4px 14px rgba(0,0,0,.4);
+    padding: 14px 24px;
     display: flex;
     align-items: center;
     flex-wrap: wrap;
-    gap: 18px;
+    gap: 22px;
+    margin-bottom: 14px;
     font-size: 14px;
+    color: var(--accent);
   }
-
-  .panel label {
+  .toolbar label {
     display: flex;
     align-items: center;
     gap: 8px;
-    color: var(--text-muted);
     user-select: none;
     cursor: pointer;
   }
-
-  .panel label span.field-name {
-    color: var(--text);
-  }
-
-  .panel input[type="checkbox"] {
-    accent-color: var(--accent-live);
-    width: 15px;
-    height: 15px;
-  }
-
-  .panel input[type="datetime-local"] {
+  .toolbar input[type="datetime-local"] {
     background: var(--bg);
-    color: var(--text);
+    color: #ffffff;
     border: 1px solid var(--border);
-    border-radius: 8px;
+    border-radius: 6px;
     padding: 6px 10px;
     font-family: inherit;
     font-size: 13px;
   }
-
-  .panel input[type="datetime-local"]:focus {
-    outline: 2px solid var(--accent-live);
+  .toolbar input[type="datetime-local"]:focus {
+    outline: 2px solid var(--accent);
     outline-offset: 1px;
   }
-
-  .panel button {
-    background: var(--surface-raised);
-    color: var(--text);
-    border: 1px solid var(--border);
-    border-radius: 8px;
+  .toolbar button {
+    background: var(--border);
+    color: var(--accent);
+    border: none;
+    border-radius: 6px;
     padding: 7px 14px;
-    font-family: inherit;
     font-size: 13px;
-    font-weight: 500;
+    font-weight: bold;
     cursor: pointer;
-    transition: border-color 0.15s ease, background 0.15s ease;
   }
+  .toolbar button:hover { background: #33456a; }
 
-  .panel button:hover {
-    border-color: var(--accent-live);
-    background: #1c3245;
+  .toolbar button#backToLive {
+    background: var(--history-soft);
+    color: var(--history);
   }
+  .toolbar button#backToLive:hover { background: rgba(244, 162, 97, 0.22); }
 
-  .panel button#backToLive {
-    border-color: var(--accent-history);
-    color: var(--accent-history);
-  }
-
-  .panel button#backToLive:hover {
-    background: var(--accent-history-dim);
-  }
-
-  .divider {
+  .toolbar-divider {
     width: 1px;
     align-self: stretch;
     background: var(--border);
@@ -144,106 +139,36 @@
 
   #historyBanner {
     display: none;
-    width: 90%;
-    max-width: 900px;
-    background: var(--accent-history-dim);
-    border: 1px solid var(--accent-history);
-    color: var(--text);
-    padding: 10px 18px;
+    width: 94%;
+    max-width: 1100px;
+    background: var(--history-soft);
+    border: 1px solid var(--history);
+    color: #ffffff;
+    padding: 10px 20px;
     border-radius: 10px;
     font-size: 13px;
     margin-bottom: 14px;
-  }
-
-  #map {
-    width: 90%;
-    max-width: 900px;
-    height: 420px;
-    border-radius: 14px;
-    border: 1px solid var(--border);
-    box-shadow: var(--shadow);
-    margin-bottom: 20px;
-  }
-
-  .card {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    padding: 20px 32px;
-    border-radius: 14px;
-    box-shadow: var(--shadow);
-    min-width: 280px;
-  }
-
-  .field {
-    display: flex;
-    justify-content: space-between;
-    align-items: baseline;
-    margin: 0;
-    padding: 12px 0;
-    font-size: 15px;
-    border-bottom: 1px solid var(--border);
-    gap: 30px;
-  }
-
-  .field:last-child { border-bottom: none; }
-
-  .label {
-    color: var(--text-muted);
-    font-weight: 500;
-  }
-
-  .value {
-    font-family: "JetBrains Mono", "Courier New", monospace;
-    font-size: 15px;
-    color: var(--text);
-  }
-
-  .status {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin: 16px 0 0;
-    font-size: 13px;
-    color: var(--text-muted);
-  }
-
-  .dot {
-    display: inline-block;
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: var(--text-muted);
-    flex-shrink: 0;
-  }
-
-  .dot.live {
-    background: var(--accent-live);
-    box-shadow: 0 0 0 4px var(--accent-live-dim);
   }
 </style>
 </head>
 <body>
 
-<header>
-  <h1>{{ app_name }}</h1>
-  <div class="subtitle">modo: {{ role }}</div>
-</header>
+<h1>{{ app_name }}</h1>
+<div class="subtitle">modo: {{ role }}</div>
 
-<div class="panel">
+<div class="toolbar">
   <label>
     <input type="checkbox" id="followToggle" checked>
-    <span class="field-name">Seguir camión</span>
+    Seguir camión
   </label>
   <button id="clearTrail">Limpiar recorrido</button>
 
-  <div class="divider"></div>
+  <div class="toolbar-divider"></div>
 
-  <label>
-    <span class="field-name">Desde</span>
+  <label>Desde:
     <input type="datetime-local" id="rangeStart">
   </label>
-  <label>
-    <span class="field-name">Hasta</span>
+  <label>Hasta:
     <input type="datetime-local" id="rangeEnd">
   </label>
   <button id="searchHistory">Ver recorrido histórico</button>
@@ -255,10 +180,10 @@
 <div id="map"></div>
 
 <div class="card">
-  <div class="field"><span class="label">Latitude</span><span class="value" id="lat">--</span></div>
-  <div class="field"><span class="label">Longitude</span><span class="value" id="lon">--</span></div>
-  <div class="field"><span class="label">Date</span><span class="value" id="date">--</span></div>
-  <div class="field"><span class="label">Time</span><span class="value" id="time">--</span></div>
+  <div class="field"><span class="label">Latitude:</span><span class="value" id="lat">--</span></div>
+  <div class="field"><span class="label">Longitude:</span><span class="value" id="lon">--</span></div>
+  <div class="field"><span class="label">Date:</span><span class="value" id="date">--</span></div>
+  <div class="field"><span class="label">Time:</span><span class="value" id="time">--</span></div>
 </div>
 
 <div class="status"><span class="dot" id="dot"></span><span id="status">Connecting…</span></div>
@@ -275,13 +200,13 @@
   const marker = L.marker([4.6, -74.08]).addTo(map);
 
   // Polilínea que va trazando el recorrido real del vehículo en tiempo real.
-  const trail = L.polyline([], { color: "#4fd8c4", weight: 4, opacity: 0.9 }).addTo(map);
+  const trail = L.polyline([], { color: "#2ecc71", weight: 4, opacity: 0.85 }).addTo(map);
 
   // Polilínea separada para el recorrido histórico consultado por rango de
   // fecha/hora. smoothFactor suaviza el trazo que dibuja Leaflet, y además
   // aplicamos un suavizado propio (Catmull-Rom) antes de dibujarlo.
   const historyTrail = L.polyline([], {
-    color: "#f2a65a",
+    color: "#f4a261",
     weight: 4,
     opacity: 0.9,
     smoothFactor: 1.5

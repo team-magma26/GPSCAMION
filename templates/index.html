@@ -9,9 +9,23 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
 <style>
+  :root {
+    --bg: #0d1b2a;
+    --card: #1b263b;
+    --border: #2a3a55;
+    --accent: #8ecae6;
+    --accent-soft: rgba(142, 202, 230, 0.12);
+    --muted: #6c7a91;
+    --live: #2ecc71;
+    --history: #f4a261;
+    --history-soft: rgba(244, 162, 97, 0.14);
+  }
+
+  * { box-sizing: border-box; }
+
   body {
     font-family: Arial, sans-serif;
-    background: #0d2a1c;
+    background: var(--bg);
     color: #ffffff;
     display: flex;
     flex-direction: column;
@@ -19,20 +33,21 @@
     padding-top: 30px;
     margin: 0;
   }
-  h1 { font-size: 22px; color: #8ecae6; margin-bottom: 4px; }
-  .subtitle { font-size: 12px; color: #6c7a91; margin-bottom: 20px; }
+
+  h1 { font-size: 24px; color: var(--accent); margin: 0 0 4px; }
+  .subtitle { font-size: 12px; color: var(--muted); margin-bottom: 22px; }
 
   #map {
-    width: 90%;
-    max-width: 900px;
-    height: 420px;
+    width: 94%;
+    max-width: 1100px;
+    height: 560px;
     border-radius: 12px;
     box-shadow: 0 4px 14px rgba(0,0,0,.4);
-    margin-bottom: 24px;
+    margin-bottom: 22px;
   }
 
   .card {
-    background: #1b263b;
+    background: var(--card);
     padding: 24px 40px;
     border-radius: 12px;
     box-shadow: 0 4px 14px rgba(0,0,0,.4);
@@ -43,26 +58,40 @@
     justify-content: space-between;
     margin: 12px 0;
     font-size: 18px;
-    border-bottom: 1px solid #2a3a55;
+    border-bottom: 1px solid var(--border);
     padding-bottom: 8px;
     gap: 30px;
   }
-  .label { color: #8ecae6; font-weight: bold; }
+  .field:last-child { border-bottom: none; margin-bottom: 0; }
+  .label { color: var(--accent); font-weight: bold; }
   .value { font-family: "Courier New", monospace; font-size: 18px; }
-  .status { margin: 16px 0 30px; font-size: 13px; color: #6c7a91; }
-  .dot {
-    display: inline-block; width: 8px; height: 8px; border-radius: 50%;
-    background: #6c7a91; margin-right: 6px;
-  }
-  .dot.live { background: #2ecc71; }
-
-  .toolbar {
+  .status {
     display: flex;
     align-items: center;
-    gap: 20px;
-    margin-bottom: 12px;
+    margin: 16px 0 30px;
+    font-size: 13px;
+    color: var(--muted);
+  }
+  .dot {
+    display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+    background: var(--muted); margin-right: 6px;
+  }
+  .dot.live { background: var(--live); }
+
+  .toolbar {
+    width: 94%;
+    max-width: 1100px;
+    background: var(--card);
+    border-radius: 12px;
+    box-shadow: 0 4px 14px rgba(0,0,0,.4);
+    padding: 14px 24px;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 22px;
+    margin-bottom: 14px;
     font-size: 14px;
-    color: #8ecae6;
+    color: var(--accent);
   }
   .toolbar label {
     display: flex;
@@ -71,16 +100,55 @@
     user-select: none;
     cursor: pointer;
   }
+  .toolbar input[type="datetime-local"] {
+    background: var(--bg);
+    color: #ffffff;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 10px;
+    font-family: inherit;
+    font-size: 13px;
+  }
+  .toolbar input[type="datetime-local"]:focus {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+  }
   .toolbar button {
-    background: #2a3a55;
-    color: #8ecae6;
+    background: var(--border);
+    color: var(--accent);
     border: none;
     border-radius: 6px;
-    padding: 6px 12px;
+    padding: 7px 14px;
     font-size: 13px;
+    font-weight: bold;
     cursor: pointer;
   }
   .toolbar button:hover { background: #33456a; }
+
+  .toolbar button#backToLive {
+    background: var(--history-soft);
+    color: var(--history);
+  }
+  .toolbar button#backToLive:hover { background: rgba(244, 162, 97, 0.22); }
+
+  .toolbar-divider {
+    width: 1px;
+    align-self: stretch;
+    background: var(--border);
+  }
+
+  #historyBanner {
+    display: none;
+    width: 94%;
+    max-width: 1100px;
+    background: var(--history-soft);
+    border: 1px solid var(--history);
+    color: #ffffff;
+    padding: 10px 20px;
+    border-radius: 10px;
+    font-size: 13px;
+    margin-bottom: 14px;
+  }
 </style>
 </head>
 <body>
@@ -94,7 +162,20 @@
     Seguir camión
   </label>
   <button id="clearTrail">Limpiar recorrido</button>
+
+  <div class="toolbar-divider"></div>
+
+  <label>Desde:
+    <input type="datetime-local" id="rangeStart">
+  </label>
+  <label>Hasta:
+    <input type="datetime-local" id="rangeEnd">
+  </label>
+  <button id="searchHistory">Ver recorrido histórico</button>
+  <button id="backToLive" style="display:none;">Volver a en vivo</button>
 </div>
+
+<div id="historyBanner"></div>
 
 <div id="map"></div>
 
@@ -121,8 +202,19 @@
   // Polilínea que va trazando el recorrido real del vehículo en tiempo real.
   const trail = L.polyline([], { color: "#2ecc71", weight: 4, opacity: 0.85 }).addTo(map);
 
+  // Polilínea separada para el recorrido histórico consultado por rango de
+  // fecha/hora. smoothFactor suaviza el trazo que dibuja Leaflet, y además
+  // aplicamos un suavizado propio (Catmull-Rom) antes de dibujarlo.
+  const historyTrail = L.polyline([], {
+    color: "#f4a261",
+    weight: 4,
+    opacity: 0.9,
+    smoothFactor: 1.5
+  }).addTo(map);
+
   let mapCentered = false;
   let followTruck = true;
+  let viewingHistory = false;
 
   const followToggle = document.getElementById("followToggle");
   followToggle.addEventListener("change", () => {
@@ -167,6 +259,85 @@
     }
   }
 
+  // Suavizado tipo Catmull-Rom: convierte una lista de puntos "en zigzag"
+  // (por el ruido normal del GPS) en una curva más natural, sin depender
+  // de ninguna librería adicional. Corre en el navegador del usuario.
+  function catmullRomSpline(points, segments = 8) {
+    if (points.length < 3) return points;
+    const result = [];
+    for (let i = 0; i < points.length - 1; i++) {
+      const p0 = points[i === 0 ? i : i - 1];
+      const p1 = points[i];
+      const p2 = points[i + 1];
+      const p3 = points[i + 2 < points.length ? i + 2 : i + 1];
+
+      for (let t = 0; t < segments; t++) {
+        const st = t / segments, st2 = st * st, st3 = st2 * st;
+        const lat = 0.5 * (2 * p1[0] + (-p0[0] + p2[0]) * st +
+          (2 * p0[0] - 5 * p1[0] + 4 * p2[0] - p3[0]) * st2 +
+          (-p0[0] + 3 * p1[0] - 3 * p2[0] + p3[0]) * st3);
+        const lon = 0.5 * (2 * p1[1] + (-p0[1] + p2[1]) * st +
+          (2 * p0[1] - 5 * p1[1] + 4 * p2[1] - p3[1]) * st2 +
+          (-p0[1] + 3 * p1[1] - 3 * p2[1] + p3[1]) * st3);
+        result.push([lat, lon]);
+      }
+    }
+    result.push(points[points.length - 1]);
+    return result;
+  }
+
+  // --- Búsqueda de recorrido histórico por rango de fecha/hora ---
+
+  document.getElementById("searchHistory").addEventListener("click", () => {
+    const start = document.getElementById("rangeStart").value;
+    const end = document.getElementById("rangeEnd").value;
+    const banner = document.getElementById("historyBanner");
+
+    if (!start || !end) {
+      alert("Selecciona fecha y hora de inicio y fin");
+      return;
+    }
+
+    fetch(`/api/history_range?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.error) {
+          alert(data.error);
+          return;
+        }
+
+        const latlngs = data.points.map((p) => [p.lat, p.lon]);
+        const smoothed = catmullRomSpline(latlngs, 8);
+
+        viewingHistory = true;
+        trail.setLatLngs([]); // oculta el trazo en vivo mientras se ve el histórico
+        historyTrail.setLatLngs(smoothed);
+
+        if (latlngs.length > 0) {
+          map.fitBounds(historyTrail.getBounds(), { maxZoom: 15, padding: [20, 20] });
+          banner.style.display = "block";
+          banner.textContent = `Mostrando recorrido histórico: ${data.count} puntos entre ${start.replace("T", " ")} y ${end.replace("T", " ")}`;
+        } else {
+          banner.style.display = "block";
+          banner.textContent = "No hay puntos registrados en ese rango de fechas";
+        }
+
+        document.getElementById("backToLive").style.display = "inline-block";
+      })
+      .catch(() => alert("Error consultando el historial"));
+  });
+
+  document.getElementById("backToLive").addEventListener("click", () => {
+    viewingHistory = false;
+    historyTrail.setLatLngs([]);
+    document.getElementById("backToLive").style.display = "none";
+    document.getElementById("historyBanner").style.display = "none";
+
+    fetch("/api/history")
+      .then((r) => r.json())
+      .then((points) => trail.setLatLngs(points.map((p) => [p.lat, p.lon])));
+  });
+
   // 1) Cargar el historial para dibujar el recorrido ya hecho antes de conectarnos en vivo.
   fetch("/api/history")
     .then((r) => r.json())
@@ -210,7 +381,7 @@
     }
 
     updateFields(data);
-    if (data.lat !== null && data.lon !== null) {
+    if (data.lat !== null && data.lon !== null && !viewingHistory) {
       updateMap(data.lat, data.lon, true);
     }
   };

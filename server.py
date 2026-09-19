@@ -10,7 +10,7 @@ from datetime import datetime
 import psycopg2
 from psycopg2 import extensions
 from dotenv import load_dotenv
-from flask import Flask, Response, jsonify, render_template
+from flask import Flask, Response, jsonify, render_template, request
 
 load_dotenv()
 #esto es una prueba para ver si se actualiza solo 
@@ -42,6 +42,10 @@ session_lock = threading.Lock()
 # el servidor Flask se reinicie — depende de que el camión deje de transmitir.
 _last_packet_dt = None
 _active_session_id = None
+
+# Límite de puntos que devuelve una consulta de historial por rango, para
+# no traer de una sola vez rangos enormes (ej: varios meses) a la página.
+MAX_HISTORY_RANGE_POINTS = 3000
 
 parser = argparse.ArgumentParser(description="GPS tracking: 1 writer (UDP+insert) + N readers (solo lectura)")
 parser.add_argument("--role", choices=["writer", "reader"], required=True,
@@ -86,6 +90,12 @@ def init_db():
     )
     cur.execute(
         "CREATE INDEX IF NOT EXISTS idx_locations_session_id ON locations (session_id, id ASC)"
+    )
+    # Índice sobre received_at: la búsqueda por rango de fecha/hora filtra
+    # justo por esta columna, así que sin este índice cada búsqueda
+    # recorrería la tabla completa.
+    cur.execute(
+        "CREATE INDEX IF NOT EXISTS idx_locations_received_at ON locations (received_at)"
     )
     cur.execute(
         """
@@ -248,6 +258,32 @@ def get_history(limit: int = 1000):
     return list(reversed(rows))
 
 
+def get_history_range(start_dt: str, end_dt: str, max_points: int = MAX_HISTORY_RANGE_POINTS):
+    """Historial dentro de una ventana de fecha/hora arbitraria elegida por
+    el usuario (no se limita a la sesión activa como get_history()).
+    Usa 'received_at' porque siempre tiene el formato fijo
+    'YYYY-MM-DD HH:MM:SS' que guarda el propio servidor al insertar.
+    Devuelve también el texto de la sentencia SQL ejecutada, para poder
+    mostrarla o registrarla."""
+    query = (
+        "SELECT lat, lon, gps_time, received_at FROM locations "
+        "WHERE received_at BETWEEN %s AND %s "
+        "ORDER BY id ASC LIMIT %s"
+    )
+    params = (start_dt, end_dt, max_points)
+
+    with db_lock:
+        conn = get_connection()
+        cur = conn.cursor()
+        sql_text = cur.mogrify(query, params).decode("utf-8")
+        print(f"[SQL] {sql_text}")  # queda visible en journalctl / logs del servicio
+        cur.execute(query, params)
+        rows = cur.fetchall()
+        cur.close()
+        conn.close()
+    return rows, sql_text
+
+
 subscribers = []
 subscribers_lock = threading.Lock()
 
@@ -333,6 +369,39 @@ def api_history():
     rows = get_history()
     points = [{"lat": lat, "lon": lon, "time": gps_time} for lat, lon, gps_time in rows]
     return jsonify(points)
+
+
+@app.route("/api/history_range")
+def api_history_range():
+    """Historial acotado a una ventana de fecha/hora que elige el usuario
+    desde el frontend. Parámetros esperados (query string):
+      start = 'YYYY-MM-DDTHH:MM'  (formato nativo de <input type="datetime-local">)
+      end   = 'YYYY-MM-DDTHH:MM'
+      debug = '1' (opcional) -> además de los puntos, devuelve la sentencia SQL ejecutada
+    """
+    start = request.args.get("start")
+    end = request.args.get("end")
+    debug = request.args.get("debug") == "1"
+
+    if not start or not end:
+        return jsonify({"error": "Se requieren los parámetros 'start' y 'end'"}), 400
+
+    # El input datetime-local llega como 'YYYY-MM-DDTHH:MM'. Se concatena
+    # con segundos y se reemplaza la 'T' por espacio para que calce
+    # exactamente con el formato 'YYYY-MM-DD HH:MM:SS' que guarda la BD.
+    start_norm = start.replace("T", " ") + ":00"
+    end_norm = end.replace("T", " ") + ":59"
+
+    rows, sql_text = get_history_range(start_norm, end_norm)
+    points = [
+        {"lat": lat, "lon": lon, "time": gps_time, "received_at": received_at}
+        for lat, lon, gps_time, received_at in rows
+    ]
+
+    response = {"points": points, "count": len(points)}
+    if debug:
+        response["sql"] = sql_text
+    return jsonify(response)
 
 
 @app.route("/events")

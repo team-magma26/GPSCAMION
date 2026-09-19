@@ -17,7 +17,7 @@
     --accent-soft: rgba(142, 202, 230, 0.12);
     --muted: #6c7a91;
     --live: #2ecc71;
-    --history: #f4a261;
+    --history: #4f2504;
     --history-soft: rgba(244, 162, 97, 0.14);
   }
 
@@ -27,120 +27,141 @@
     font-family: Arial, sans-serif;
     background: var(--bg);
     color: #ffffff;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    padding-top: 30px;
     margin: 0;
+    padding-bottom: 40px;
   }
 
-  h1 { font-size: 24px; color: var(--accent); margin: 0 0 4px; }
-  .subtitle { font-size: 12px; color: var(--muted); margin-bottom: 22px; }
-
-  #map {
+  /* ---------- Barra de título ---------- */
+  .topbar {
+    background: var(--card);
+    border-bottom: 1px solid var(--border);
+    box-shadow: 0 4px 14px rgba(0,0,0,.4);
+  }
+  .topbar-inner {
     width: 94%;
     max-width: 1100px;
-    height: 560px;
-    border-radius: 12px;
-    box-shadow: 0 4px 14px rgba(0,0,0,.4);
-    margin-bottom: 22px;
-  }
-
-  .card {
-    background: var(--card);
-    padding: 24px 40px;
-    border-radius: 12px;
-    box-shadow: 0 4px 14px rgba(0,0,0,.4);
-    min-width: 280px;
-  }
-  .field {
-    display: flex;
-    justify-content: space-between;
-    margin: 12px 0;
-    font-size: 18px;
-    border-bottom: 1px solid var(--border);
-    padding-bottom: 8px;
-    gap: 30px;
-  }
-  .field:last-child { border-bottom: none; margin-bottom: 0; }
-  .label { color: var(--accent); font-weight: bold; }
-  .value { font-family: "Courier New", monospace; font-size: 18px; }
-  .status {
+    margin: 0 auto;
+    padding: 14px 0;
     display: flex;
     align-items: center;
-    margin: 16px 0 30px;
-    font-size: 13px;
+    flex-wrap: wrap;
+    gap: 16px;
+  }
+  .logo {
+    width: 48px; height: 48px;
+    flex-shrink: 0;
+    display: grid; place-items: center;
+    border-radius: 12px;
+    background: var(--accent-soft);
+    border: 1px solid var(--border);
+    color: var(--accent);
+  }
+  .logo svg { width: 28px; height: 28px; }
+  .titles { flex: 1; min-width: 200px; }
+  h1 { font-size: 22px; color: var(--accent); margin: 0; letter-spacing: .3px; }
+  .role {
+    display: inline-block;
+    margin-top: 6px;
+    padding: 2px 10px;
+    border-radius: 999px;
+    background: var(--accent-soft);
+    color: var(--accent);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+  .status {
+    display: flex; align-items: center; gap: 8px;
+    padding: 7px 14px;
+    border-radius: 999px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    font-size: 12px;
     color: var(--muted);
   }
   .dot {
     display: inline-block; width: 8px; height: 8px; border-radius: 50%;
-    background: var(--muted); margin-right: 6px;
+    background: var(--muted);
   }
-  .dot.live { background: var(--live); }
+  .dot.live { background: var(--live); box-shadow: 0 0 0 3px rgba(46, 204, 113, 0.2); }
 
-  .toolbar {
-    width: 94%;
-    max-width: 1100px;
+  /* ---------- Contenido ---------- */
+  .wrap { width: 94%; max-width: 1100px; margin: 22px auto 0; }
+
+  .panel {
     background: var(--card);
+    border: 1px solid var(--border);
     border-radius: 12px;
     box-shadow: 0 4px 14px rgba(0,0,0,.4);
-    padding: 14px 24px;
+    padding: 16px 22px;
     display: flex;
-    align-items: center;
     flex-wrap: wrap;
     gap: 22px;
     margin-bottom: 14px;
-    font-size: 14px;
-    color: var(--accent);
   }
-  .toolbar label {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    user-select: none;
-    cursor: pointer;
+  .group { display: flex; flex-direction: column; gap: 10px; }
+  .group.grow { flex: 1; }
+  .group-title {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--muted);
+    font-weight: bold;
   }
-  .toolbar input[type="datetime-local"] {
+  .group-body { display: flex; align-items: center; flex-wrap: wrap; gap: 14px; font-size: 14px; color: var(--accent); }
+  .divider { width: 1px; align-self: stretch; background: var(--border); }
+
+  /* Interruptor "Seguir camión" */
+  .switch { display: flex; align-items: center; gap: 10px; cursor: pointer; user-select: none; }
+  .switch input { display: none; }
+  .slider {
+    width: 38px; height: 22px; border-radius: 999px;
+    background: var(--border);
+    position: relative;
+    transition: background .2s;
+  }
+  .slider::after {
+    content: "";
+    position: absolute; top: 3px; left: 3px;
+    width: 16px; height: 16px; border-radius: 50%;
+    background: var(--muted);
+    transition: transform .2s, background .2s;
+  }
+  .switch input:checked + .slider { background: var(--accent-soft); box-shadow: inset 0 0 0 1px var(--accent); }
+  .switch input:checked + .slider::after { transform: translateX(16px); background: var(--accent); }
+
+  .date-field { display: flex; align-items: center; gap: 8px; }
+  input[type="datetime-local"] {
     background: var(--bg);
     color: #ffffff;
+    color-scheme: dark;
     border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 6px 10px;
+    border-radius: 8px;
+    padding: 8px 10px;
     font-family: inherit;
     font-size: 13px;
   }
-  .toolbar input[type="datetime-local"]:focus {
-    outline: 2px solid var(--accent);
-    outline-offset: 1px;
-  }
-  .toolbar button {
+  input[type="datetime-local"]:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+  .btn {
     background: var(--border);
     color: var(--accent);
-    border: none;
-    border-radius: 6px;
-    padding: 7px 14px;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    padding: 8px 16px;
     font-size: 13px;
     font-weight: bold;
     cursor: pointer;
+    transition: background .15s;
   }
-  .toolbar button:hover { background: #33456a; }
-
-  .toolbar button#backToLive {
-    background: var(--history-soft);
-    color: var(--history);
-  }
-  .toolbar button#backToLive:hover { background: rgba(244, 162, 97, 0.22); }
-
-  .toolbar-divider {
-    width: 1px;
-    align-self: stretch;
-    background: var(--border);
-  }
+  .btn:hover { background: #33456a; }
+  .btn.primary { background: var(--accent); color: var(--bg); }
+  .btn.primary:hover { background: #a4d6ec; }
+  .btn.history { background: var(--history-soft); color: var(--history); border-color: var(--history); }
+  .btn.history:hover { background: rgba(244, 162, 97, 0.22); }
 
   #historyBanner {
     display: none;
-    width: 94%;
-    max-width: 1100px;
     background: var(--history-soft);
     border: 1px solid var(--history);
     color: #ffffff;
@@ -149,44 +170,114 @@
     font-size: 13px;
     margin-bottom: 14px;
   }
+
+  #map {
+    width: 100%;
+    height: 560px;
+    border-radius: 14px;
+    border: 1px solid var(--border);
+    box-shadow: 0 4px 14px rgba(0,0,0,.4);
+  }
+
+  /* Camión como marcador del mapa */
+  .truck-pin {
+    width: 40px; height: 40px;
+    display: grid; place-items: center;
+    border-radius: 50%;
+    background: var(--card);
+    border: 2px solid var(--accent);
+    color: var(--accent);
+    box-shadow: 0 2px 10px rgba(0,0,0,.5);
+  }
+  .truck-pin svg { width: 22px; height: 22px; }
+
+  /* Tarjetas de datos */
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-top: 18px; }
+  .stat {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    box-shadow: 0 4px 14px rgba(0,0,0,.4);
+    padding: 14px 18px;
+  }
+  .label {
+    display: block;
+    margin-bottom: 6px;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--accent);
+    font-weight: bold;
+  }
+  .value { font-family: "Courier New", monospace; font-size: 20px; }
+
+  @media (max-width: 760px) {
+    .stats { grid-template-columns: repeat(2, 1fr); }
+    #map { height: 420px; }
+    .divider { display: none; }
+  }
 </style>
 </head>
 <body>
 
-<h1>{{ app_name }}</h1>
-<div class="subtitle">modo: {{ role }}</div>
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="logo" id="logoIcon">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M1 6h13v10H1z"/>
+        <path d="M14 9h4l3 3v4h-7z"/>
+        <circle cx="6" cy="18" r="2"/>
+        <circle cx="17" cy="18" r="2"/>
+      </svg>
+    </div>
+    <div class="titles">
+      <h1>{{ app_name }}</h1>
+      <span class="role">modo: {{ role }}</span>
+    </div>
+    <div class="status"><span class="dot" id="dot"></span><span id="status">Connecting…</span></div>
+  </div>
+</header>
 
-<div class="toolbar">
-  <label>
-    <input type="checkbox" id="followToggle" checked>
-    Seguir camión
-  </label>
-  <button id="clearTrail">Limpiar recorrido</button>
+<main class="wrap">
 
-  <div class="toolbar-divider"></div>
+  <section class="panel">
+    <div class="group">
+      <span class="group-title">En vivo</span>
+      <div class="group-body">
+        <label class="switch">
+          <input type="checkbox" id="followToggle" checked>
+          <span class="slider"></span>
+          Seguir camión
+        </label>
+        <button class="btn" id="clearTrail">Limpiar recorrido</button>
+      </div>
+    </div>
 
-  <label>Desde:
-    <input type="datetime-local" id="rangeStart">
-  </label>
-  <label>Hasta:
-    <input type="datetime-local" id="rangeEnd">
-  </label>
-  <button id="searchHistory">Ver recorrido histórico</button>
-  <button id="backToLive" style="display:none;">Volver a en vivo</button>
-</div>
+    <div class="divider"></div>
 
-<div id="historyBanner"></div>
+    <div class="group grow">
+      <span class="group-title">Recorrido histórico</span>
+      <div class="group-body">
+        <label class="date-field">Desde <input type="datetime-local" id="rangeStart"></label>
+        <label class="date-field">Hasta <input type="datetime-local" id="rangeEnd"></label>
+        <button class="btn primary" id="searchHistory">Ver recorrido</button>
+        <button class="btn history" id="backToLive" style="display:none;">Volver a en vivo</button>
+      </div>
+    </div>
+  </section>
 
-<div id="map"></div>
+  <div id="historyBanner"></div>
 
-<div class="card">
-  <div class="field"><span class="label">Latitude:</span><span class="value" id="lat">--</span></div>
-  <div class="field"><span class="label">Longitude:</span><span class="value" id="lon">--</span></div>
-  <div class="field"><span class="label">Date:</span><span class="value" id="date">--</span></div>
-  <div class="field"><span class="label">Time:</span><span class="value" id="time">--</span></div>
-</div>
+  <div id="map"></div>
 
-<div class="status"><span class="dot" id="dot"></span><span id="status">Connecting…</span></div>
+  <section class="stats">
+    <div class="stat"><span class="label">Latitud</span><span class="value" id="lat">--</span></div>
+    <div class="stat"><span class="label">Longitud</span><span class="value" id="lon">--</span></div>
+    <div class="stat"><span class="label">Fecha</span><span class="value" id="date">--</span></div>
+    <div class="stat"><span class="label">Hora</span><span class="value" id="time">--</span></div>
+  </section>
+
+</main>
 
 <script>
 
@@ -197,14 +288,19 @@
     attribution: "&copy; OpenStreetMap contributors",
   }).addTo(map);
 
-  const marker = L.marker([4.6, -74.08]).addTo(map);
+  // El marcador reutiliza el mismo ícono de camión de la barra de título.
+  const truckIcon = L.divIcon({
+    className: "",
+    html: '<div class="truck-pin">' + document.getElementById("logoIcon").innerHTML + "</div>",
+    iconSize: [40, 40],
+    iconAnchor: [20, 20],
+  });
+  const marker = L.marker([4.6, -74.08], { icon: truckIcon }).addTo(map);
 
-  // Polilínea que va trazando el recorrido real del vehículo en tiempo real.
+  // Recorrido real del vehículo en tiempo real.
   const trail = L.polyline([], { color: "#2ecc71", weight: 4, opacity: 0.85 }).addTo(map);
 
-  // Polilínea separada para el recorrido histórico consultado por rango de
-  // fecha/hora. smoothFactor suaviza el trazo que dibuja Leaflet, y además
-  // aplicamos un suavizado propio (Catmull-Rom) antes de dibujarlo.
+  // Recorrido histórico consultado por rango de fecha/hora (con suavizado propio Catmull-Rom).
   const historyTrail = L.polyline([], {
     color: "#f4a261",
     weight: 4,
@@ -259,9 +355,8 @@
     }
   }
 
-  // Suavizado tipo Catmull-Rom: convierte una lista de puntos "en zigzag"
-  // (por el ruido normal del GPS) en una curva más natural, sin depender
-  // de ninguna librería adicional. Corre en el navegador del usuario.
+  // Suavizado tipo Catmull-Rom: convierte puntos "en zigzag" (ruido normal
+  // del GPS) en una curva más natural. Corre en el navegador del usuario.
   function catmullRomSpline(points, segments = 8) {
     if (points.length < 3) return points;
     const result = [];
@@ -371,8 +466,7 @@
   source.onmessage = (event) => {
     const data = JSON.parse(event.data);
 
-    // El writer se reinició: empieza una sesión/recorrido nuevo.
-    // Borramos el trazo aunque la página ya estuviera abierta, sin recargar.
+    // El writer empezó una sesión/recorrido nuevo: borramos el trazo sin recargar.
     if (data.type === "session_start") {
       trail.setLatLngs([]);
       mapCentered = false;

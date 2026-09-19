@@ -6,6 +6,7 @@ import socket
 import threading
 import uuid
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 import psycopg2
 from psycopg2 import extensions
@@ -25,7 +26,21 @@ DB_SSLMODE = os.environ.get("DB_SSLMODE", "require")
 # Nombre visible de la página, configurable desde .env (ej: APP_NAME="Flota Norte - GPS")
 APP_NAME = os.environ.get("APP_NAME", "GPS Truck Tracker")
 
-WRITER_ACCOUNT_ID = "main"
+# Cuenta que esta instancia escribe (si es writer) y muestra (writer o reader).
+# Se configura en el .env de cada instancia (ej: ACCOUNT_ID=alejandra).
+# Si no se define, usa "main" y todo se comporta como antes de este cambio.
+ACCOUNT_ID = os.environ.get("ACCOUNT_ID", "main")
+
+# Zona horaria con la que se guardan received_at y started_at. Es
+# independiente de la zona horaria del sistema operativo de la instancia.
+APP_TZ = ZoneInfo(os.environ.get("APP_TZ", "America/Bogota"))
+
+
+def now_local() -> datetime:
+    """Hora actual en APP_TZ, sin tzinfo (naive), para que siga siendo
+    comparable con los datetime que se leen de la BD como texto."""
+    return datetime.now(APP_TZ).replace(tzinfo=None)
+
 
 NOTIFY_CHANNEL = "new_location"
 
@@ -97,6 +112,10 @@ def init_db():
     cur.execute(
         "CREATE INDEX IF NOT EXISTS idx_locations_received_at ON locations (received_at)"
     )
+    # Índice compuesto: la búsqueda por rango filtra por cuenta y por fecha.
+    cur.execute(
+        "CREATE INDEX IF NOT EXISTS idx_locations_acc_received ON locations (account_id, received_at)"
+    )
     cur.execute(
         """
         CREATE TABLE IF NOT EXISTS sessions (
@@ -106,21 +125,27 @@ def init_db():
         )
         """
     )
+    # Migración: cada sesión pertenece a una cuenta. Las sesiones que ya
+    # existían quedan asignadas a 'main'.
+    cur.execute(
+        "ALTER TABLE sessions ADD COLUMN IF NOT EXISTS account_id TEXT NOT NULL DEFAULT 'main'"
+    )
     conn.commit()
     cur.close()
     conn.close()
 
 
 def start_new_session() -> str:
-    """Registra un nuevo recorrido y devuelve su session_id.
+    """Registra un nuevo recorrido de ACCOUNT_ID y devuelve su session_id.
     Todo lo que se inserte después de esto queda "marcado" con esta sesión,
     así el mapa puede trazar solo el recorrido actual."""
-    session_id = datetime.now().strftime("%Y%m%d-%H%M%S") + "-" + uuid.uuid4().hex[:6]
+    now = now_local()
+    session_id = now.strftime("%Y%m%d-%H%M%S") + "-" + uuid.uuid4().hex[:6]
     conn = get_connection()
     cur = conn.cursor()
     cur.execute(
-        "INSERT INTO sessions (session_id, started_at) VALUES (%s, %s)",
-        (session_id, datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
+        "INSERT INTO sessions (session_id, account_id, started_at) VALUES (%s, %s, %s)",
+        (session_id, ACCOUNT_ID, now.strftime("%Y-%m-%d %H:%M:%S")),
     )
     conn.commit()
     cur.close()
@@ -129,13 +154,16 @@ def start_new_session() -> str:
 
 
 def get_current_session_id():
-    """Sesión más reciente registrada, la consulta cualquier proceso
-    (writer o reader) directamente contra la BD — no depende de que sea
-    el mismo proceso que la creó."""
+    """Sesión más reciente registrada para ACCOUNT_ID. La consulta cualquier
+    proceso (writer o reader) directamente contra la BD — no depende de que
+    sea el mismo proceso que la creó."""
     with db_lock:
         conn = get_connection()
         cur = conn.cursor()
-        cur.execute("SELECT session_id FROM sessions ORDER BY id DESC LIMIT 1")
+        cur.execute(
+            "SELECT session_id FROM sessions WHERE account_id = %s ORDER BY id DESC LIMIT 1",
+            (ACCOUNT_ID,),
+        )
         row = cur.fetchone()
         cur.close()
         conn.close()
@@ -143,12 +171,15 @@ def get_current_session_id():
 
 
 def get_last_received_at():
-    """received_at del último punto guardado en toda la tabla, para saber
+    """received_at del último punto guardado de ACCOUNT_ID, para saber
     cuánto tiempo llevaba el GPS callado la última vez que corrió el writer."""
     with db_lock:
         conn = get_connection()
         cur = conn.cursor()
-        cur.execute("SELECT received_at FROM locations ORDER BY id DESC LIMIT 1")
+        cur.execute(
+            "SELECT received_at FROM locations WHERE account_id = %s ORDER BY id DESC LIMIT 1",
+            (ACCOUNT_ID,),
+        )
         row = cur.fetchone()
         cur.close()
         conn.close()
@@ -156,15 +187,19 @@ def get_last_received_at():
 
 
 def notify_session_start(session_id: str):
-    """Avisa en vivo (vía LISTEN/NOTIFY) a todas las páginas ya abiertas que
-    empezó una sesión nueva, para que borren el trazo sin necesidad de
-    recargar la página."""
+    """Avisa en vivo (vía LISTEN/NOTIFY) a todas las páginas ya abiertas de
+    esta cuenta que empezó una sesión nueva, para que borren el trazo sin
+    necesidad de recargar la página."""
     conn = get_connection()
     conn.set_isolation_level(extensions.ISOLATION_LEVEL_AUTOCOMMIT)
     cur = conn.cursor()
     cur.execute(
         f"NOTIFY {NOTIFY_CHANNEL}, %s",
-        (json.dumps({"type": "session_start", "session_id": session_id}),),
+        (json.dumps({
+            "type": "session_start",
+            "session_id": session_id,
+            "account_id": ACCOUNT_ID,
+        }),),
     )
     cur.close()
     conn.close()
@@ -195,7 +230,7 @@ def init_session_tracking():
 def save_location(lat: float, lon: float, gps_time: str):
     global _last_packet_dt, _active_session_id
 
-    received_at_dt = datetime.now()
+    received_at_dt = now_local()
     received_at = received_at_dt.strftime("%Y-%m-%d %H:%M:%S")
 
     # Decide si este paquete pertenece al recorrido actual o si abre uno
@@ -207,17 +242,19 @@ def save_location(lat: float, lon: float, gps_time: str):
         _last_packet_dt = received_at_dt
         session_id = _active_session_id
 
+    payload = {**location_to_payload(lat, lon, gps_time), "account_id": ACCOUNT_ID}
+
     with db_lock:
         conn = get_connection()
         cur = conn.cursor()
         cur.execute(
             "INSERT INTO locations (account_id, session_id, lat, lon, gps_time, received_at) "
             "VALUES (%s, %s, %s, %s, %s, %s)",
-            (WRITER_ACCOUNT_ID, session_id, lat, lon, gps_time, received_at),
+            (ACCOUNT_ID, session_id, lat, lon, gps_time, received_at),
         )
         cur.execute(
             f"NOTIFY {NOTIFY_CHANNEL}, %s",
-            (json.dumps(location_to_payload(lat, lon, gps_time)),)
+            (json.dumps(payload),)
         )
         conn.commit()
         cur.close()
@@ -229,7 +266,10 @@ def get_latest_location():
     with db_lock:
         conn = get_connection()
         cur = conn.cursor()
-        cur.execute("SELECT lat, lon, gps_time FROM locations ORDER BY id DESC LIMIT 1")
+        cur.execute(
+            "SELECT lat, lon, gps_time FROM locations WHERE account_id = %s ORDER BY id DESC LIMIT 1",
+            (ACCOUNT_ID,),
+        )
         row = cur.fetchone()
         cur.close()
         conn.close()
@@ -250,8 +290,12 @@ def get_history(limit: int = 1000):
             )
         else:
             # Compatibilidad: si aún no hay ninguna sesión registrada (ej.
-            # datos viejos previos a este cambio), no filtra.
-            cur.execute("SELECT lat, lon, gps_time FROM locations ORDER BY id DESC LIMIT %s", (limit,))
+            # datos viejos previos a este cambio), no filtra por sesión,
+            # pero sí por cuenta.
+            cur.execute(
+                "SELECT lat, lon, gps_time FROM locations WHERE account_id = %s ORDER BY id DESC LIMIT %s",
+                (ACCOUNT_ID, limit),
+            )
         rows = cur.fetchall()
         cur.close()
         conn.close()
@@ -259,18 +303,18 @@ def get_history(limit: int = 1000):
 
 
 def get_history_range(start_dt: str, end_dt: str, max_points: int = MAX_HISTORY_RANGE_POINTS):
-    """Historial dentro de una ventana de fecha/hora arbitraria elegida por
-    el usuario (no se limita a la sesión activa como get_history()).
+    """Historial de ACCOUNT_ID dentro de una ventana de fecha/hora arbitraria
+    elegida por el usuario (no se limita a la sesión activa como get_history()).
     Usa 'received_at' porque siempre tiene el formato fijo
     'YYYY-MM-DD HH:MM:SS' que guarda el propio servidor al insertar.
     Devuelve también el texto de la sentencia SQL ejecutada, para poder
     mostrarla o registrarla."""
     query = (
         "SELECT lat, lon, gps_time, received_at FROM locations "
-        "WHERE received_at BETWEEN %s AND %s "
+        "WHERE account_id = %s AND received_at BETWEEN %s AND %s "
         "ORDER BY id ASC LIMIT %s"
     )
-    params = (start_dt, end_dt, max_points)
+    params = (ACCOUNT_ID, start_dt, end_dt, max_points)
 
     with db_lock:
         conn = get_connection()
@@ -333,13 +377,16 @@ def listen_notifications():
     conn.set_isolation_level(extensions.ISOLATION_LEVEL_AUTOCOMMIT)
     cur = conn.cursor()
     cur.execute(f"LISTEN {NOTIFY_CHANNEL};")
-    print(f"[DB] ({ROLE}) Listening on '{NOTIFY_CHANNEL}'")
+    print(f"[DB] ({ROLE}) Listening on '{NOTIFY_CHANNEL}' (account: {ACCOUNT_ID})")
     while True:
         conn.poll()
         while conn.notifies:
             notify = conn.notifies.pop(0)
             payload = json.loads(notify.payload)
-            broadcast(payload)
+            # Todas las instancias reciben todos los NOTIFY de la BD; cada una
+            # solo reenvía a su página los de su propia cuenta.
+            if payload.get("account_id", "main") == ACCOUNT_ID:
+                broadcast(payload)
 
 
 app = Flask(__name__)
@@ -427,8 +474,8 @@ if __name__ == "__main__":
     if IS_WRITER:
         init_db()
         init_session_tracking()
-        print(f"[DB] (writer) Sesión activa: {_active_session_id}")
+        print(f"[DB] (writer) Cuenta: {ACCOUNT_ID} | Sesión activa: {_active_session_id}")
         threading.Thread(target=udp_listener, daemon=True).start()
     threading.Thread(target=listen_notifications, daemon=True).start()
-    print(f"[HTTP] ({ROLE}) '{APP_NAME}' en http://0.0.0.0:{HTTP_PORT} (DB: {DB_NAME}@{DB_HOST})")
+    print(f"[HTTP] ({ROLE}) '{APP_NAME}' en http://0.0.0.0:{HTTP_PORT} (DB: {DB_NAME}@{DB_HOST}, cuenta: {ACCOUNT_ID}, tz: {APP_TZ.key})")
     app.run(host="0.0.0.0", port=HTTP_PORT, threaded=True)

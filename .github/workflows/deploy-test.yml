@@ -1,0 +1,20 @@
+name: Deploy to TEST environment
+
+on:
+  push:
+    branches:
+      - test-alejandra
+      - test-alejandro
+      - test-sebastian
+      - test-andres
+
+jobs:
+  deploy-test:
+    runs-on: ${{ github.ref_name }}
+    steps:
+      - name: Pull and restart (test)
+        run: |
+          cd ~/GPSCAMION-test
+          git checkout ${{ github.ref_name }}
+          git pull --no-rebase origin ${{ github.ref_name }}
+          sudo systemctl restart GPSCAMION-test

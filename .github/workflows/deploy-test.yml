@@ -8,37 +8,13 @@ on:
       - test-sebastian
       - test-andres
 
-# Evita que dos deploys de la misma branch corran a la vez (choques de git / index.lock)
-concurrency:
-  group: deploy-${{ github.ref_name }}
-  cancel-in-progress: false
-
 jobs:
   deploy-test:
     runs-on: ${{ github.ref_name }}
     steps:
       - name: Pull and restart (test)
         run: |
-          set -e
           cd ~/GPSCAMION-test
-          BRANCH="${{ github.ref_name }}"
-
-          # Diagnóstico: en qué máquina/usuario/carpeta corre realmente el job
-          echo "host=$(hostname) user=$(whoami) dir=$(pwd) branch=$(git branch --show-current) head=$(git rev-parse --short HEAD)"
-
-          # Reintenta si hay un fallo de red momentáneo; si los 3 intentos fallan, el job falla.
-          retry() {
-            for i in 1 2 3; do
-              "$@" && return 0
-              echo "Intento $i falló, reintentando en 5s..."
-              sleep 5
-            done
-            return 1
-          }
-
-          retry git fetch origin "$BRANCH"
-          git checkout "$BRANCH"
-          # Deja la carpeta idéntica a la branch remota (evita historiales divergentes)
-          git reset --hard "origin/$BRANCH"
-
+          git checkout ${{ github.ref_name }}
+          git pull --no-rebase origin ${{ github.ref_name }}
           sudo systemctl restart GPSCAMION-test

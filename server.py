@@ -51,6 +51,12 @@ db_lock = threading.Lock()
 # que llegue abre una sesión nueva (y el mapa borra el trazo anterior).
 SESSION_GAP_SECONDS = 60
 
+# Umbral para agrupar lecturas consecutivas cerca de un mismo punto (búsqueda
+# "por lugar") en una sola "pasada". Si el camión estuvo ahí varias lecturas
+# seguidas con menos de este tiempo entre una y otra, se reporta como una
+# sola visita (con hora de entrada y salida) en vez de listarlas todas.
+PASSAGE_GAP_SECONDS = 300
+
 session_lock = threading.Lock()
 # Estado en memoria del proceso writer: cuándo llegó el último paquete UDP
 # y cuál es la sesión (recorrido) activa en este momento. No depende de que
@@ -328,6 +334,95 @@ def get_history_range(start_dt: str, end_dt: str, max_points: int = MAX_HISTORY_
     return rows, sql_text
 
 
+def get_passages_near(target_lat: float, target_lon: float, radius_m: float,
+                       start_dt: str = None, end_dt: str = None,
+                       max_points: int = MAX_HISTORY_RANGE_POINTS):
+    """Puntos de ACCOUNT_ID dentro de radius_m metros del punto
+    (target_lat, target_lon), calculando la distancia con la fórmula de
+    Haversine directo en SQL (sin necesidad de extensiones tipo PostGIS).
+    Si se pasan start_dt/end_dt (formato 'YYYY-MM-DD HH:MM:SS'), acota
+    además por fecha/hora, igual que get_history_range().
+    Devuelve también el texto de la sentencia SQL ejecutada."""
+    date_filter = ""
+    params = [target_lat, target_lon, target_lat, ACCOUNT_ID]
+    if start_dt and end_dt:
+        date_filter = "AND received_at BETWEEN %s AND %s"
+        params += [start_dt, end_dt]
+    params += [radius_m, max_points]
+
+    query = f"""
+        SELECT lat, lon, gps_time, received_at, distance_m FROM (
+            SELECT lat, lon, gps_time, received_at,
+                6371000 * acos(
+                    LEAST(1.0, GREATEST(-1.0,
+                        cos(radians(%s)) * cos(radians(lat)) * cos(radians(lon) - radians(%s)) +
+                        sin(radians(%s)) * sin(radians(lat))
+                    ))
+                ) AS distance_m
+            FROM locations
+            WHERE account_id = %s
+            {date_filter}
+        ) sub
+        WHERE distance_m <= %s
+        ORDER BY received_at ASC
+        LIMIT %s
+    """
+
+    with db_lock:
+        conn = get_connection()
+        cur = conn.cursor()
+        sql_text = cur.mogrify(query, params).decode("utf-8")
+        print(f"[SQL] {sql_text}")
+        cur.execute(query, params)
+        rows = cur.fetchall()
+        cur.close()
+        conn.close()
+    return rows, sql_text
+
+
+def group_passages(rows, gap_seconds: int = PASSAGE_GAP_SECONDS):
+    """Agrupa filas (lat, lon, gps_time, received_at, distance_m) ordenadas
+    por received_at en "pasadas": si el camión estuvo cerca del punto en
+    varias lecturas seguidas (menos de gap_seconds entre una y otra), se
+    reporta como una sola pasada con su hora de entrada y de salida, en vez
+    de listar cada lectura individual."""
+    passages = []
+    current = None
+    prev_dt = None
+
+    for lat, lon, gps_time, received_at, distance_m in rows:
+        received_dt = datetime.strptime(received_at, "%Y-%m-%d %H:%M:%S")
+
+        if current is None or (received_dt - prev_dt).total_seconds() > gap_seconds:
+            if current is not None:
+                passages.append(current)
+            current = {
+                "start_received_at": received_at,
+                "end_received_at": received_at,
+                "start_gps_time": gps_time,
+                "end_gps_time": gps_time,
+                "lat": lat,
+                "lon": lon,
+                "points_count": 1,
+                "min_distance_m": round(distance_m, 1),
+            }
+        else:
+            current["end_received_at"] = received_at
+            current["end_gps_time"] = gps_time
+            current["points_count"] += 1
+            if distance_m < current["min_distance_m"]:
+                current["min_distance_m"] = round(distance_m, 1)
+                current["lat"] = lat
+                current["lon"] = lon
+
+        prev_dt = received_dt
+
+    if current is not None:
+        passages.append(current)
+
+    return passages
+
+
 subscribers = []
 subscribers_lock = threading.Lock()
 
@@ -446,6 +541,45 @@ def api_history_range():
     ]
 
     response = {"points": points, "count": len(points)}
+    if debug:
+        response["sql"] = sql_text
+    return jsonify(response)
+
+
+@app.route("/api/passages")
+def api_passages():
+    """Busca en qué momentos el camión pasó cerca de un punto elegido en el
+    mapa. Parámetros (query string):
+      lat, lon   = coordenadas del punto seleccionado (obligatorios)
+      radius     = radio de búsqueda en metros (opcional, default 150)
+      start, end = 'YYYY-MM-DDTHH:MM' (opcionales, mismo formato que
+                   /api/history_range; si se omiten, busca en todo el historial)
+      debug      = '1' (opcional) -> además de las pasadas, devuelve la sentencia SQL ejecutada
+    """
+    lat_param = request.args.get("lat")
+    lon_param = request.args.get("lon")
+    if not lat_param or not lon_param:
+        return jsonify({"error": "Se requieren los parámetros 'lat' y 'lon'"}), 400
+
+    try:
+        target_lat = float(lat_param)
+        target_lon = float(lon_param)
+    except ValueError:
+        return jsonify({"error": "'lat' y 'lon' deben ser numéricos"}), 400
+
+    radius_m = request.args.get("radius", default=150, type=float)
+
+    start = request.args.get("start")
+    end = request.args.get("end")
+    start_norm = (start.replace("T", " ") + ":00") if start else None
+    end_norm = (end.replace("T", " ") + ":59") if end else None
+
+    debug = request.args.get("debug") == "1"
+
+    rows, sql_text = get_passages_near(target_lat, target_lon, radius_m, start_norm, end_norm)
+    passages = group_passages(rows)
+
+    response = {"passages": passages, "count": len(passages), "points_matched": len(rows)}
     if debug:
         response["sql"] = sql_text
     return jsonify(response)

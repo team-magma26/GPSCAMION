@@ -551,7 +551,7 @@ def api_passages():
     """Busca en qué momentos el camión pasó cerca de un punto elegido en el
     mapa. Parámetros (query string):
       lat, lon   = coordenadas del punto seleccionado (obligatorios)
-      radius     = radio de búsqueda en metros (opcional, default 150)
+      radius     = radio de búsqueda en metros (opcional, default 100)
       start, end = 'YYYY-MM-DDTHH:MM' (opcionales, mismo formato que
                    /api/history_range; si se omiten, busca en todo el historial)
       debug      = '1' (opcional) -> además de las pasadas, devuelve la sentencia SQL ejecutada
@@ -567,7 +567,7 @@ def api_passages():
     except ValueError:
         return jsonify({"error": "'lat' y 'lon' deben ser numéricos"}), 400
 
-    radius_m = request.args.get("radius", default=150, type=float)
+    radius_m = request.args.get("radius", default=100, type=float)
 
     start = request.args.get("start")
     end = request.args.get("end")

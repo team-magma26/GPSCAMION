@@ -143,17 +143,6 @@
   }
   input[type="datetime-local"]:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
 
-  input[type="number"] {
-    background: var(--bg);
-    color: #ffffff;
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 8px 10px;
-    font-family: inherit;
-    font-size: 13px;
-  }
-  input[type="number"]:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
-
   .btn {
     background: var(--border);
     color: var(--accent);
@@ -215,15 +204,24 @@
   }
   .truck-pin svg { width: 22px; height: 22px; }
 
-  /* Tarjetas de datos */
-  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-top: 18px; }
-  .stat {
+  /* Tarjeta "Posición Actual" */
+  .stats-card {
     background: var(--card);
     border: 1px solid var(--border);
     border-radius: 12px;
     box-shadow: 0 4px 14px rgba(0,0,0,.4);
-    padding: 14px 18px;
+    padding: 16px 22px;
+    margin-top: 18px;
   }
+  .stats-card-title {
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--accent);
+    font-weight: bold;
+    margin-bottom: 14px;
+  }
+  .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
   .label {
     display: block;
     margin-bottom: 6px;
@@ -236,7 +234,7 @@
   .value { font-family: "Courier New", monospace; font-size: 20px; }
 
   @media (max-width: 760px) {
-    .stats { grid-template-columns: repeat(2, 1fr); }
+    .stats-grid { grid-template-columns: repeat(2, 1fr); }
     #map { height: 420px; }
     .divider { display: none; }
   }
@@ -295,7 +293,6 @@
       <span class="group-title">Buscar por lugar</span>
       <div class="group-body">
         <button class="btn" id="pickLocationBtn">Seleccionar punto en el mapa</button>
-        <label class="date-field">Radio (m) <input type="number" id="passageRadius" value="150" min="10" step="10" style="width:80px;"></label>
         <button class="btn primary" id="searchPassages">Buscar pasadas</button>
         <button class="btn history" id="clearPassages" style="display:none;">Limpiar búsqueda</button>
       </div>
@@ -307,11 +304,14 @@
 
   <div id="map"></div>
 
-  <section class="stats">
-    <div class="stat"><span class="label">Latitud</span><span class="value" id="lat">--</span></div>
-    <div class="stat"><span class="label">Longitud</span><span class="value" id="lon">--</span></div>
-    <div class="stat"><span class="label">Fecha</span><span class="value" id="date">--</span></div>
-    <div class="stat"><span class="label">Hora</span><span class="value" id="time">--</span></div>
+  <section class="stats-card">
+    <div class="stats-card-title">Posición Actual</div>
+    <div class="stats-grid">
+      <div><span class="label">Latitud</span><span class="value" id="lat">--</span></div>
+      <div><span class="label">Longitud</span><span class="value" id="lon">--</span></div>
+      <div><span class="label">Fecha</span><span class="value" id="date">--</span></div>
+      <div><span class="label">Hora</span><span class="value" id="time">--</span></div>
+    </div>
   </section>
 
 </main>
@@ -524,6 +524,8 @@
 
   // --- Búsqueda de "pasadas" por un lugar elegido en el mapa ---
 
+  const PASSAGE_RADIUS_M = 100;
+
   let pickingLocation = false;
   let placeMarker = null;
   let placeCircle = null;
@@ -544,17 +546,9 @@
     if (placeCircle) map.removeLayer(placeCircle);
 
     placeMarker = L.marker([lat, lng]).addTo(map);
-    const radius = parseFloat(document.getElementById("passageRadius").value) || 150;
-    placeCircle = L.circle([lat, lng], { radius, color: "#8ecae6", fillOpacity: 0.08 }).addTo(map);
+    placeCircle = L.circle([lat, lng], { radius: PASSAGE_RADIUS_M, color: "#8ecae6", fillOpacity: 0.08 }).addTo(map);
 
     document.getElementById("status").textContent = `Punto seleccionado: ${lat.toFixed(5)}, ${lng.toFixed(5)}`;
-  });
-
-  document.getElementById("passageRadius").addEventListener("change", () => {
-    if (placeCircle) {
-      const radius = parseFloat(document.getElementById("passageRadius").value) || 150;
-      placeCircle.setRadius(radius);
-    }
   });
 
   document.getElementById("searchPassages").addEventListener("click", () => {
@@ -564,12 +558,11 @@
     }
 
     const { lat, lng } = placeMarker.getLatLng();
-    const radius = parseFloat(document.getElementById("passageRadius").value) || 150;
     const start = document.getElementById("rangeStart").value;
     const end = document.getElementById("rangeEnd").value;
     const banner = document.getElementById("passagesBanner");
 
-    let url = `/api/passages?lat=${lat}&lon=${lng}&radius=${radius}`;
+    let url = `/api/passages?lat=${lat}&lon=${lng}&radius=${PASSAGE_RADIUS_M}`;
     if (start && end) {
       url += `&start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`;
     }
@@ -611,6 +604,9 @@
     passageMarkersLayer.clearLayers();
     document.getElementById("passagesBanner").style.display = "none";
     document.getElementById("clearPassages").style.display = "none";
+
+    if (placeMarker) { map.removeLayer(placeMarker); placeMarker = null; }
+    if (placeCircle) { map.removeLayer(placeCircle); placeCircle = null; }
   });
 </script>
 

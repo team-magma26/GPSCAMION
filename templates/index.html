@@ -9,103 +9,312 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
 <style>
+  :root {
+    --bg: #0d1b2a;
+    --card: #1b263b;
+    --border: #2a3a55;
+    --accent: #8ecae6;
+    --accent-soft: rgba(142, 202, 230, 0.12);
+    --muted: #6c7a91;
+    --live: #2ecc71;
+    --history: #f4a261;
+    --history-soft: rgba(244, 162, 97, 0.14);
+  }
+
+  * { box-sizing: border-box; }
+
   body {
     font-family: Arial, sans-serif;
-    background: #0d1b2a;
+    background: var(--bg);
     color: #ffffff;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    padding-top: 30px;
     margin: 0;
-  }
-  h1 { font-size: 22px; color: #8ecae6; margin-bottom: 4px; }
-  .subtitle { font-size: 12px; color: #6c7a91; margin-bottom: 20px; }
-
-  #map {
-    width: 90%;
-    max-width: 900px;
-    height: 420px;
-    border-radius: 12px;
-    box-shadow: 0 4px 14px rgba(0,0,0,.4);
-    margin-bottom: 24px;
+    padding-bottom: 40px;
   }
 
-  .card {
-    background: #1b263b;
-    padding: 24px 40px;
-    border-radius: 12px;
+  /* ---------- Barra de título ---------- */
+  .topbar {
+    background: var(--card);
+    border-bottom: 1px solid var(--border);
     box-shadow: 0 4px 14px rgba(0,0,0,.4);
-    min-width: 280px;
   }
-  .field {
+  .topbar-inner {
+    width: 94%;
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 14px 0;
     display: flex;
-    justify-content: space-between;
-    margin: 12px 0;
-    font-size: 18px;
-    border-bottom: 1px solid #2a3a55;
-    padding-bottom: 8px;
-    gap: 30px;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 16px;
   }
-  .label { color: #8ecae6; font-weight: bold; }
-  .value { font-family: "Courier New", monospace; font-size: 18px; }
-  .status { margin: 16px 0 30px; font-size: 13px; color: #6c7a91; }
+  .logo {
+    width: 48px; height: 48px;
+    flex-shrink: 0;
+    display: grid; place-items: center;
+    border-radius: 12px;
+    background: var(--accent-soft);
+    border: 1px solid var(--border);
+    color: var(--accent);
+  }
+  .logo svg { width: 28px; height: 28px; }
+  .titles { flex: 1; min-width: 200px; }
+  h1 { font-size: 22px; color: var(--accent); margin: 0; letter-spacing: .3px; }
+  .role {
+    display: inline-block;
+    margin-top: 6px;
+    padding: 2px 10px;
+    border-radius: 999px;
+    background: var(--accent-soft);
+    color: var(--accent);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+  .status {
+    display: flex; align-items: center; gap: 8px;
+    padding: 7px 14px;
+    border-radius: 999px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    font-size: 12px;
+    color: var(--muted);
+  }
   .dot {
     display: inline-block; width: 8px; height: 8px; border-radius: 50%;
-    background: #6c7a91; margin-right: 6px;
+    background: var(--muted);
   }
-  .dot.live { background: #2ecc71; }
+  .dot.live { background: var(--live); box-shadow: 0 0 0 3px rgba(46, 204, 113, 0.2); }
 
-  .toolbar {
+  /* ---------- Contenido ---------- */
+  .wrap { width: 94%; max-width: 1100px; margin: 22px auto 0; }
+
+  .panel {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    box-shadow: 0 4px 14px rgba(0,0,0,.4);
+    padding: 16px 22px;
     display: flex;
-    align-items: center;
-    gap: 20px;
-    margin-bottom: 12px;
-    font-size: 14px;
-    color: #8ecae6;
+    flex-wrap: wrap;
+    gap: 22px;
+    margin-bottom: 14px;
   }
-  .toolbar label {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    user-select: none;
-    cursor: pointer;
+  .group { display: flex; flex-direction: column; gap: 10px; }
+  .group.grow { flex: 1; }
+  .group-title {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--muted);
+    font-weight: bold;
   }
-  .toolbar button {
-    background: #2a3a55;
-    color: #8ecae6;
-    border: none;
-    border-radius: 6px;
-    padding: 6px 12px;
+  .group-body { display: flex; align-items: center; flex-wrap: wrap; gap: 14px; font-size: 14px; color: var(--accent); }
+  .divider { width: 1px; align-self: stretch; background: var(--border); }
+
+  /* Interruptor "Seguir camión" */
+  .switch { display: flex; align-items: center; gap: 10px; cursor: pointer; user-select: none; }
+  .switch input { display: none; }
+  .slider {
+    width: 38px; height: 22px; border-radius: 999px;
+    background: var(--border);
+    position: relative;
+    transition: background .2s;
+  }
+  .slider::after {
+    content: "";
+    position: absolute; top: 3px; left: 3px;
+    width: 16px; height: 16px; border-radius: 50%;
+    background: var(--muted);
+    transition: transform .2s, background .2s;
+  }
+  .switch input:checked + .slider { background: var(--accent-soft); box-shadow: inset 0 0 0 1px var(--accent); }
+  .switch input:checked + .slider::after { transform: translateX(16px); background: var(--accent); }
+
+  .date-field { display: flex; align-items: center; gap: 8px; }
+  input[type="datetime-local"] {
+    background: var(--bg);
+    color: #ffffff;
+    color-scheme: dark;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-family: inherit;
     font-size: 13px;
-    cursor: pointer;
   }
-  .toolbar button:hover { background: #33456a; }
+  input[type="datetime-local"]:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+  .btn {
+    background: var(--border);
+    color: var(--accent);
+    border: 1px solid transparent;
+    border-radius: 8px;
+    padding: 8px 16px;
+    font-size: 13px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: background .15s;
+  }
+  .btn:hover { background: #33456a; }
+  .btn.primary { background: var(--accent); color: var(--bg); }
+  .btn.primary:hover { background: #a4d6ec; }
+  .btn.history { background: var(--history-soft); color: var(--history); border-color: var(--history); }
+  .btn.history:hover { background: rgba(244, 162, 97, 0.22); }
+
+  #historyBanner {
+    display: none;
+    background: var(--history-soft);
+    border: 1px solid var(--history);
+    color: #ffffff;
+    padding: 10px 20px;
+    border-radius: 10px;
+    font-size: 13px;
+    margin-bottom: 14px;
+  }
+
+  #passagesBanner {
+    display: none;
+    background: var(--history-soft);
+    border: 1px solid var(--history);
+    color: #ffffff;
+    padding: 10px 20px;
+    border-radius: 10px;
+    font-size: 13px;
+    margin-bottom: 14px;
+  }
+  #passagesBanner ul { margin: 8px 0 0 18px; padding: 0; }
+  #passagesBanner li { margin-bottom: 4px; }
+
+  #map {
+    width: 100%;
+    height: 560px;
+    border-radius: 14px;
+    border: 1px solid var(--border);
+    box-shadow: 0 4px 14px rgba(0,0,0,.4);
+  }
+
+  /* Camión como marcador del mapa */
+  .truck-pin {
+    width: 40px; height: 40px;
+    display: grid; place-items: center;
+    border-radius: 50%;
+    background: var(--card);
+    border: 2px solid var(--accent);
+    color: var(--accent);
+    box-shadow: 0 2px 10px rgba(0,0,0,.5);
+  }
+  .truck-pin svg { width: 22px; height: 22px; }
+
+  /* Tarjeta "Posición Actual" */
+  .stats-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    box-shadow: 0 4px 14px rgba(0,0,0,.4);
+    padding: 16px 22px;
+    margin-top: 18px;
+  }
+  .stats-card-title {
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--accent);
+    font-weight: bold;
+    margin-bottom: 14px;
+  }
+  .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+  .label {
+    display: block;
+    margin-bottom: 6px;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--accent);
+    font-weight: bold;
+  }
+  .value { font-family: "Courier New", monospace; font-size: 20px; }
+
+  @media (max-width: 760px) {
+    .stats-grid { grid-template-columns: repeat(2, 1fr); }
+    #map { height: 420px; }
+    .divider { display: none; }
+  }
 </style>
 </head>
 <body>
 
-<h1>{{ app_name }}</h1>
-<div class="subtitle">modo: {{ role }}</div>
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="logo" id="logoIcon">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M1 6h13v10H1z"/>
+        <path d="M14 9h4l3 3v4h-7z"/>
+        <circle cx="6" cy="18" r="2"/>
+        <circle cx="17" cy="18" r="2"/>
+      </svg>
+    </div>
+    <div class="titles">
+      <h1>{{ app_name }}</h1>
+      <span class="role">modo: {{ role }}</span>
+    </div>
+    <div class="status"><span class="dot" id="dot"></span><span id="status">Connecting…</span></div>
+  </div>
+</header>
 
-<div class="toolbar">
-  <label>
-    <input type="checkbox" id="followToggle" checked>
-    Seguir camión
-  </label>
-  <button id="clearTrail">Limpiar recorrido</button>
-</div>
+<main class="wrap">
 
-<div id="map"></div>
+  <section class="panel">
+    <div class="group">
+      <span class="group-title">En vivo</span>
+      <div class="group-body">
+        <label class="switch">
+          <input type="checkbox" id="followToggle" checked>
+          <span class="slider"></span>
+          Seguir camión
+        </label>
+        <button class="btn" id="clearTrail">Limpiar recorrido</button>
+      </div>
+    </div>
 
-<div class="card">
-  <div class="field"><span class="label">Latitude:</span><span class="value" id="lat">--</span></div>
-  <div class="field"><span class="label">Longitude:</span><span class="value" id="lon">--</span></div>
-  <div class="field"><span class="label">Date:</span><span class="value" id="date">--</span></div>
-  <div class="field"><span class="label">Time:</span><span class="value" id="time">--</span></div>
-</div>
+    <div class="divider"></div>
 
-<div class="status"><span class="dot" id="dot"></span><span id="status">Connecting…</span></div>
+    <div class="group grow">
+      <span class="group-title">Recorrido histórico</span>
+      <div class="group-body">
+        <label class="date-field">Desde <input type="datetime-local" id="rangeStart"></label>
+        <label class="date-field">Hasta <input type="datetime-local" id="rangeEnd"></label>
+        <button class="btn primary" id="searchHistory">Ver recorrido</button>
+        <button class="btn history" id="backToLive" style="display:none;">Volver a en vivo</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="group grow">
+      <span class="group-title">Buscar por lugar</span>
+      <div class="group-body">
+        <button class="btn" id="pickLocationBtn">Seleccionar punto en el mapa</button>
+        <button class="btn primary" id="searchPassages">Buscar pasadas</button>
+        <button class="btn history" id="clearPassages" style="display:none;">Limpiar búsqueda</button>
+      </div>
+    </div>
+  </section>
+
+  <div id="historyBanner"></div>
+  <div id="passagesBanner"></div>
+
+  <div id="map"></div>
+
+  <section class="stats-card">
+    <div class="stats-card-title">Posición Actual</div>
+    <div class="stats-grid">
+      <div><span class="label">Latitud</span><span class="value" id="lat">--</span></div>
+      <div><span class="label">Longitud</span><span class="value" id="lon">--</span></div>
+      <div><span class="label">Fecha</span><span class="value" id="date">--</span></div>
+      <div><span class="label">Hora</span><span class="value" id="time">--</span></div>
+    </div>
+  </section>
+
+</main>
 
 <script>
 
@@ -116,13 +325,29 @@
     attribution: "&copy; OpenStreetMap contributors",
   }).addTo(map);
 
-  const marker = L.marker([4.6, -74.08]).addTo(map);
+  // El marcador reutiliza el mismo ícono de camión de la barra de título.
+  const truckIcon = L.divIcon({
+    className: "",
+    html: '<div class="truck-pin">' + document.getElementById("logoIcon").innerHTML + "</div>",
+    iconSize: [40, 40],
+    iconAnchor: [20, 20],
+  });
+  const marker = L.marker([4.6, -74.08], { icon: truckIcon }).addTo(map);
 
-  // Polilínea que va trazando el recorrido real del vehículo en tiempo real.
+  // Recorrido real del vehículo en tiempo real.
   const trail = L.polyline([], { color: "#2ecc71", weight: 4, opacity: 0.85 }).addTo(map);
+
+  // Recorrido histórico consultado por rango de fecha/hora (con suavizado propio Catmull-Rom).
+  const historyTrail = L.polyline([], {
+    color: "#c2410c",
+    weight: 4,
+    opacity: 0.9,
+    smoothFactor: 1.5
+  }).addTo(map);
 
   let mapCentered = false;
   let followTruck = true;
+  let viewingHistory = false;
 
   const followToggle = document.getElementById("followToggle");
   followToggle.addEventListener("change", () => {
@@ -167,6 +392,84 @@
     }
   }
 
+  // Suavizado tipo Catmull-Rom: convierte puntos "en zigzag" (ruido normal
+  // del GPS) en una curva más natural. Corre en el navegador del usuario.
+  function catmullRomSpline(points, segments = 8) {
+    if (points.length < 3) return points;
+    const result = [];
+    for (let i = 0; i < points.length - 1; i++) {
+      const p0 = points[i === 0 ? i : i - 1];
+      const p1 = points[i];
+      const p2 = points[i + 1];
+      const p3 = points[i + 2 < points.length ? i + 2 : i + 1];
+
+      for (let t = 0; t < segments; t++) {
+        const st = t / segments, st2 = st * st, st3 = st2 * st;
+        const lat = 0.5 * (2 * p1[0] + (-p0[0] + p2[0]) * st +
+          (2 * p0[0] - 5 * p1[0] + 4 * p2[0] - p3[0]) * st2 +
+          (-p0[0] + 3 * p1[0] - 3 * p2[0] + p3[0]) * st3);
+        const lon = 0.5 * (2 * p1[1] + (-p0[1] + p2[1]) * st +
+          (2 * p0[1] - 5 * p1[1] + 4 * p2[1] - p3[1]) * st2 +
+          (-p0[1] + 3 * p1[1] - 3 * p2[1] + p3[1]) * st3);
+        result.push([lat, lon]);
+      }
+    }
+    result.push(points[points.length - 1]);
+    return result;
+  }
+
+  // --- Búsqueda de recorrido histórico por rango de fecha/hora ---
+
+  document.getElementById("searchHistory").addEventListener("click", () => {
+    const start = document.getElementById("rangeStart").value;
+    const end = document.getElementById("rangeEnd").value;
+    const banner = document.getElementById("historyBanner");
+
+    if (!start || !end) {
+      alert("Selecciona fecha y hora de inicio y fin");
+      return;
+    }
+
+    fetch(`/api/history_range?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.error) {
+          alert(data.error);
+          return;
+        }
+
+        const latlngs = data.points.map((p) => [p.lat, p.lon]);
+        const smoothed = catmullRomSpline(latlngs, 8);
+
+        viewingHistory = true;
+        trail.setLatLngs([]); // oculta el trazo en vivo mientras se ve el histórico
+        historyTrail.setLatLngs(smoothed);
+
+        if (latlngs.length > 0) {
+          map.fitBounds(historyTrail.getBounds(), { maxZoom: 15, padding: [20, 20] });
+          banner.style.display = "block";
+          banner.textContent = `Mostrando recorrido histórico: ${data.count} puntos entre ${start.replace("T", " ")} y ${end.replace("T", " ")}`;
+        } else {
+          banner.style.display = "block";
+          banner.textContent = "No hay puntos registrados en ese rango de fechas";
+        }
+
+        document.getElementById("backToLive").style.display = "inline-block";
+      })
+      .catch(() => alert("Error consultando el historial"));
+  });
+
+  document.getElementById("backToLive").addEventListener("click", () => {
+    viewingHistory = false;
+    historyTrail.setLatLngs([]);
+    document.getElementById("backToLive").style.display = "none";
+    document.getElementById("historyBanner").style.display = "none";
+
+    fetch("/api/history")
+      .then((r) => r.json())
+      .then((points) => trail.setLatLngs(points.map((p) => [p.lat, p.lon])));
+  });
+
   // 1) Cargar el historial para dibujar el recorrido ya hecho antes de conectarnos en vivo.
   fetch("/api/history")
     .then((r) => r.json())
@@ -200,8 +503,7 @@
   source.onmessage = (event) => {
     const data = JSON.parse(event.data);
 
-    // El writer se reinició: empieza una sesión/recorrido nuevo.
-    // Borramos el trazo aunque la página ya estuviera abierta, sin recargar.
+    // El writer empezó una sesión/recorrido nuevo: borramos el trazo sin recargar.
     if (data.type === "session_start") {
       trail.setLatLngs([]);
       mapCentered = false;
@@ -210,7 +512,7 @@
     }
 
     updateFields(data);
-    if (data.lat !== null && data.lon !== null) {
+    if (data.lat !== null && data.lon !== null && !viewingHistory) {
       updateMap(data.lat, data.lon, true);
     }
   };
@@ -219,6 +521,93 @@
     document.getElementById("dot").classList.remove("live");
     document.getElementById("status").textContent = "Connection lost — retrying…";
   };
+
+  // --- Búsqueda de "pasadas" por un lugar elegido en el mapa ---
+
+  const PASSAGE_RADIUS_M = 100;
+
+  let pickingLocation = false;
+  let placeMarker = null;
+  let placeCircle = null;
+  const passageMarkersLayer = L.layerGroup().addTo(map);
+
+  document.getElementById("pickLocationBtn").addEventListener("click", () => {
+    pickingLocation = true;
+    document.getElementById("status").textContent = "Haz clic en el mapa para elegir el punto…";
+  });
+
+  map.on("click", (e) => {
+    if (!pickingLocation) return;
+    pickingLocation = false;
+
+    const { lat, lng } = e.latlng;
+
+    if (placeMarker) map.removeLayer(placeMarker);
+    if (placeCircle) map.removeLayer(placeCircle);
+
+    placeMarker = L.marker([lat, lng]).addTo(map);
+    placeCircle = L.circle([lat, lng], { radius: PASSAGE_RADIUS_M, color: "#8ecae6", fillOpacity: 0.08 }).addTo(map);
+
+    document.getElementById("status").textContent = `Punto seleccionado: ${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+  });
+
+  document.getElementById("searchPassages").addEventListener("click", () => {
+    if (!placeMarker) {
+      alert("Primero selecciona un punto en el mapa");
+      return;
+    }
+
+    const { lat, lng } = placeMarker.getLatLng();
+    const start = document.getElementById("rangeStart").value;
+    const end = document.getElementById("rangeEnd").value;
+    const banner = document.getElementById("passagesBanner");
+
+    let url = `/api/passages?lat=${lat}&lon=${lng}&radius=${PASSAGE_RADIUS_M}`;
+    if (start && end) {
+      url += `&start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`;
+    }
+
+    fetch(url)
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.error) {
+          alert(data.error);
+          return;
+        }
+
+        passageMarkersLayer.clearLayers();
+
+        if (data.passages.length === 0) {
+          banner.style.display = "block";
+          banner.innerHTML = "El camión no ha pasado por ese punto en el rango consultado.";
+        } else {
+          const items = data.passages.map((p) => {
+            L.circleMarker([p.lat, p.lon], { radius: 6, color: "#f4a261", fillOpacity: 0.9 })
+              .bindPopup(`${p.start_gps_time} — ${p.end_gps_time}`)
+              .addTo(passageMarkersLayer);
+
+            return p.start_received_at === p.end_received_at
+              ? `<li>${p.start_received_at} (${p.points_count} lectura${p.points_count > 1 ? "s" : ""})</li>`
+              : `<li>${p.start_received_at} → ${p.end_received_at} (${p.points_count} lecturas)</li>`;
+          }).join("");
+
+          banner.style.display = "block";
+          banner.innerHTML = `<strong>${data.passages.length} pasada(s) encontrada(s):</strong><ul>${items}</ul>`;
+        }
+
+        document.getElementById("clearPassages").style.display = "inline-block";
+      })
+      .catch(() => alert("Error consultando las pasadas por ese punto"));
+  });
+
+  document.getElementById("clearPassages").addEventListener("click", () => {
+    passageMarkersLayer.clearLayers();
+    document.getElementById("passagesBanner").style.display = "none";
+    document.getElementById("clearPassages").style.display = "none";
+
+    if (placeMarker) { map.removeLayer(placeMarker); placeMarker = null; }
+    if (placeCircle) { map.removeLayer(placeCircle); placeCircle = null; }
+  });
 </script>
 
 </body>

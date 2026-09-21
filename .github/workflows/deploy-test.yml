@@ -2,41 +2,20 @@ name: Deploy to TEST environment
 
 on:
   push:
-    branches: [test]
+    branches:
+      - test-alejandra
+      - test-alejandro
+      - test-sebastian
+      - test-andres
 
 jobs:
-  deploy-writer-test:
-    runs-on: writer-main
+  deploy-test:
+    runs-on: ${{ github.ref_name }}
     steps:
       - name: Pull and restart (test)
         run: |
           cd ~/GPSCAMION-test
-          git pull origin test
-          sudo systemctl restart GPSCAMION-test
-
-  deploy-reader-1-test:
-    runs-on: reader-1
-    steps:
-      - name: Pull and restart (test)
-        run: |
-          cd ~/GPSCAMION-test
-          git pull origin test
-          sudo systemctl restart GPSCAMION-test
-
-  deploy-reader-2-test:
-    runs-on: reader-2
-    steps:
-      - name: Pull and restart (test)
-        run: |
-          cd ~/GPSCAMION-test
-          git pull origin test
-          sudo systemctl restart GPSCAMION-test
-
-  deploy-reader-3-test:
-    runs-on: reader-3
-    steps:
-      - name: Pull and restart (test)
-        run: |
-          cd ~/GPSCAMION-test
-          git pull origin test
+          git fetch origin
+          git checkout ${{ github.ref_name }}
+          git pull --no-rebase origin ${{ github.ref_name }}
           sudo systemctl restart GPSCAMION-test

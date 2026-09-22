@@ -7,16 +7,14 @@ import threading
 import uuid
 from datetime import datetime
 from zoneinfo import ZoneInfo
-from zoneinfo import ZoneInfo
 
 import psycopg2
 from psycopg2 import extensions
 from dotenv import load_dotenv
 from flask import Flask, Response, jsonify, render_template, request
-from flask import Flask, Response, jsonify, render_template, request
 
 load_dotenv()
-#esto es una prueba para ver si se actualiza solo 
+
 
 DB_HOST = os.environ["DB_HOST"]
 DB_PORT = os.environ.get("DB_PORT", "5432")
@@ -25,16 +23,13 @@ DB_USER = os.environ["DB_USER"]
 DB_PASSWORD = os.environ["DB_PASSWORD"]
 DB_SSLMODE = os.environ.get("DB_SSLMODE", "require")
 
-# Nombre visible de la página, configurable desde .env (ej: APP_NAME="Flota Norte - GPS")
+
 APP_NAME = os.environ.get("APP_NAME", "GPS Truck Tracker")
 
-# Cuenta que esta instancia escribe (si es writer) y muestra (writer o reader).
-# Se configura en el .env de cada instancia (ej: ACCOUNT_ID=alejandra).
-# Si no se define, usa "main" y todo se comporta como antes de este cambio.
+
 ACCOUNT_ID = os.environ.get("ACCOUNT_ID", "main")
 
-# Zona horaria con la que se guardan received_at y started_at. Es
-# independiente de la zona horaria del sistema operativo de la instancia.
+
 APP_TZ = ZoneInfo(os.environ.get("APP_TZ", "America/Bogota"))
 
 
@@ -48,26 +43,18 @@ NOTIFY_CHANNEL = "new_location"
 
 db_lock = threading.Lock()
 
-# Umbral de silencio del GPS para considerar que empieza un recorrido nuevo.
-# Si pasan más de este tiempo sin recibir un paquete UDP, el próximo paquete
-# que llegue abre una sesión nueva (y el mapa borra el trazo anterior).
+
 SESSION_GAP_SECONDS = 60
 
-# Umbral para agrupar lecturas consecutivas cerca de un mismo punto (búsqueda
-# "por lugar") en una sola "pasada". Si el camión estuvo ahí varias lecturas
-# seguidas con menos de este tiempo entre una y otra, se reporta como una
-# sola visita (con hora de entrada y salida) en vez de listarlas todas.
+
 PASSAGE_GAP_SECONDS = 300
 
 session_lock = threading.Lock()
-# Estado en memoria del proceso writer: cuándo llegó el último paquete UDP
-# y cuál es la sesión (recorrido) activa en este momento. No depende de que
-# el servidor Flask se reinicie — depende de que el camión deje de transmitir.
+
 _last_packet_dt = None
 _active_session_id = None
 
-# Límite de puntos que devuelve una consulta de historial por rango, para
-# no traer de una sola vez rangos enormes (ej: varios meses) a la página.
+
 MAX_HISTORY_RANGE_POINTS = 3000
 
 parser = argparse.ArgumentParser(description="GPS tracking: 1 writer (UDP+insert) + N readers (solo lectura)")
@@ -105,8 +92,7 @@ def init_db():
         )
         """
     )
-    # Migración: si la tabla ya existía de antes (sin session_id), la agrega
-    # sin tocar los datos que ya había.
+
     cur.execute("ALTER TABLE locations ADD COLUMN IF NOT EXISTS session_id TEXT")
     cur.execute(
         "CREATE INDEX IF NOT EXISTS idx_locations_account_id ON locations (account_id, id DESC)"
@@ -114,15 +100,17 @@ def init_db():
     cur.execute(
         "CREATE INDEX IF NOT EXISTS idx_locations_session_id ON locations (session_id, id ASC)"
     )
-    # Índice sobre received_at: la búsqueda por rango de fecha/hora filtra
-    # justo por esta columna, así que sin este índice cada búsqueda
-    # recorrería la tabla completa.
+
     cur.execute(
         "CREATE INDEX IF NOT EXISTS idx_locations_received_at ON locations (received_at)"
     )
-    # Índice compuesto: la búsqueda por rango filtra por cuenta y por fecha.
+
     cur.execute(
         "CREATE INDEX IF NOT EXISTS idx_locations_acc_received ON locations (account_id, received_at)"
+    )
+  
+    cur.execute(
+        "CREATE INDEX IF NOT EXISTS idx_locations_acc_gpstime ON locations (account_id, gps_time)"
     )
     cur.execute(
         """
@@ -133,8 +121,7 @@ def init_db():
         )
         """
     )
-    # Migración: cada sesión pertenece a una cuenta. Las sesiones que ya
-    # existían quedan asignadas a 'main'.
+
     cur.execute(
         "ALTER TABLE sessions ADD COLUMN IF NOT EXISTS account_id TEXT NOT NULL DEFAULT 'main'"
     )
@@ -241,8 +228,7 @@ def save_location(lat: float, lon: float, gps_time: str):
     received_at_dt = now_local()
     received_at = received_at_dt.strftime("%Y-%m-%d %H:%M:%S")
 
-    # Decide si este paquete pertenece al recorrido actual o si abre uno
-    # nuevo, según cuánto tiempo pasó desde el último paquete recibido.
+
     with session_lock:
         if _last_packet_dt is None or (received_at_dt - _last_packet_dt).total_seconds() > SESSION_GAP_SECONDS:
             _active_session_id = start_new_session()
@@ -297,9 +283,7 @@ def get_history(limit: int = 1000):
                 (session_id, limit),
             )
         else:
-            # Compatibilidad: si aún no hay ninguna sesión registrada (ej.
-            # datos viejos previos a este cambio), no filtra por sesión,
-            # pero sí por cuenta.
+
             cur.execute(
                 "SELECT lat, lon, gps_time FROM locations WHERE account_id = %s ORDER BY id DESC LIMIT %s",
                 (ACCOUNT_ID, limit),
@@ -313,14 +297,18 @@ def get_history(limit: int = 1000):
 def get_history_range(start_dt: str, end_dt: str, max_points: int = MAX_HISTORY_RANGE_POINTS):
     """Historial de ACCOUNT_ID dentro de una ventana de fecha/hora arbitraria
     elegida por el usuario (no se limita a la sesión activa como get_history()).
-    Usa 'received_at' porque siempre tiene el formato fijo
-    'YYYY-MM-DD HH:MM:SS' que guarda el propio servidor al insertar.
+    Filtra y ordena por 'gps_time': es la hora que reporta el propio GPS, o
+    sea el momento real en que el camión estuvo ahí (a diferencia de
+    'received_at', que es cuándo el servidor recibió el paquete y puede
+    traer algo de retraso de red). Asume que gps_time viene en formato
+    'YYYY-MM-DD HH:MM:SS'; si el dispositivo llegara a mandar otro formato,
+    esta comparación de texto dejaría de ser confiable para ese punto.
     Devuelve también el texto de la sentencia SQL ejecutada, para poder
     mostrarla o registrarla."""
     query = (
         "SELECT lat, lon, gps_time, received_at FROM locations "
-        "WHERE account_id = %s AND received_at BETWEEN %s AND %s "
-        "ORDER BY id ASC LIMIT %s"
+        "WHERE account_id = %s AND gps_time BETWEEN %s AND %s "
+        "ORDER BY gps_time ASC LIMIT %s"
     )
     params = (ACCOUNT_ID, start_dt, end_dt, max_points)
 
@@ -328,7 +316,7 @@ def get_history_range(start_dt: str, end_dt: str, max_points: int = MAX_HISTORY_
         conn = get_connection()
         cur = conn.cursor()
         sql_text = cur.mogrify(query, params).decode("utf-8")
-        print(f"[SQL] {sql_text}")  # queda visible en journalctl / logs del servicio
+        print(f"[SQL] {sql_text}")
         cur.execute(query, params)
         rows = cur.fetchall()
         cur.close()
@@ -343,12 +331,13 @@ def get_passages_near(target_lat: float, target_lon: float, radius_m: float,
     (target_lat, target_lon), calculando la distancia con la fórmula de
     Haversine directo en SQL (sin necesidad de extensiones tipo PostGIS).
     Si se pasan start_dt/end_dt (formato 'YYYY-MM-DD HH:MM:SS'), acota
-    además por fecha/hora, igual que get_history_range().
+    además por 'gps_time' (la hora real del GPS, no la de llegada al
+    servidor), igual que get_history_range().
     Devuelve también el texto de la sentencia SQL ejecutada."""
     date_filter = ""
     params = [target_lat, target_lon, target_lat, ACCOUNT_ID]
     if start_dt and end_dt:
-        date_filter = "AND received_at BETWEEN %s AND %s"
+        date_filter = "AND gps_time BETWEEN %s AND %s"
         params += [start_dt, end_dt]
     params += [radius_m, max_points]
 
@@ -366,7 +355,7 @@ def get_passages_near(target_lat: float, target_lon: float, radius_m: float,
             {date_filter}
         ) sub
         WHERE distance_m <= %s
-        ORDER BY received_at ASC
+        ORDER BY gps_time ASC
         LIMIT %s
     """
 
@@ -384,40 +373,47 @@ def get_passages_near(target_lat: float, target_lon: float, radius_m: float,
 
 def group_passages(rows, gap_seconds: int = PASSAGE_GAP_SECONDS):
     """Agrupa filas (lat, lon, gps_time, received_at, distance_m) ordenadas
-    por received_at en "pasadas": si el camión estuvo cerca del punto en
-    varias lecturas seguidas (menos de gap_seconds entre una y otra), se
-    reporta como una sola pasada con su hora de entrada y de salida, en vez
-    de listar cada lectura individual."""
+    por gps_time en "pasadas": si el camión estuvo cerca del punto en varias
+    lecturas seguidas (menos de gap_seconds entre una y otra, medido con la
+    hora real del GPS), se reporta como una sola pasada con su hora de
+    entrada y de salida, en vez de listar cada lectura individual.
+    received_at se conserva en cada pasada solo como referencia de cuándo
+    llegó ese dato al servidor."""
     passages = []
     current = None
     prev_dt = None
 
     for lat, lon, gps_time, received_at, distance_m in rows:
-        received_dt = datetime.strptime(received_at, "%Y-%m-%d %H:%M:%S")
+        try:
+            gps_dt = datetime.strptime(gps_time, "%Y-%m-%d %H:%M:%S")
+        except ValueError:
+        
+            print(f"[WARN] gps_time con formato inesperado, se omite: {gps_time!r}")
+            continue
 
-        if current is None or (received_dt - prev_dt).total_seconds() > gap_seconds:
+        if current is None or (gps_dt - prev_dt).total_seconds() > gap_seconds:
             if current is not None:
                 passages.append(current)
             current = {
-                "start_received_at": received_at,
-                "end_received_at": received_at,
                 "start_gps_time": gps_time,
                 "end_gps_time": gps_time,
+                "start_received_at": received_at,
+                "end_received_at": received_at,
                 "lat": lat,
                 "lon": lon,
                 "points_count": 1,
                 "min_distance_m": round(distance_m, 1),
             }
         else:
-            current["end_received_at"] = received_at
             current["end_gps_time"] = gps_time
+            current["end_received_at"] = received_at
             current["points_count"] += 1
             if distance_m < current["min_distance_m"]:
                 current["min_distance_m"] = round(distance_m, 1)
                 current["lat"] = lat
                 current["lon"] = lon
 
-        prev_dt = received_dt
+        prev_dt = gps_dt
 
     if current is not None:
         passages.append(current)
@@ -449,6 +445,8 @@ def parse_message(raw: str):
     lat = float(fields["Lat"])
     lon = float(fields["Lon"])
     gps_time = fields["Time"]
+   
+    datetime.strptime(gps_time, "%Y-%m-%d %H:%M:%S")
     return lat, lon, gps_time
 
 
@@ -480,8 +478,7 @@ def listen_notifications():
         while conn.notifies:
             notify = conn.notifies.pop(0)
             payload = json.loads(notify.payload)
-            # Todas las instancias reciben todos los NOTIFY de la BD; cada una
-            # solo reenvía a su página los de su propia cuenta.
+
             if payload.get("account_id", "main") == ACCOUNT_ID:
                 broadcast(payload)
 
@@ -518,7 +515,8 @@ def api_history():
 @app.route("/api/history_range")
 def api_history_range():
     """Historial acotado a una ventana de fecha/hora que elige el usuario
-    desde el frontend. Parámetros esperados (query string):
+    desde el frontend, filtrando por la hora real del GPS (gps_time).
+    Parámetros esperados (query string):
       start = 'YYYY-MM-DDTHH:MM'  (formato nativo de <input type="datetime-local">)
       end   = 'YYYY-MM-DDTHH:MM'
       debug = '1' (opcional) -> además de los puntos, devuelve la sentencia SQL ejecutada
@@ -530,9 +528,7 @@ def api_history_range():
     if not start or not end:
         return jsonify({"error": "Se requieren los parámetros 'start' y 'end'"}), 400
 
-    # El input datetime-local llega como 'YYYY-MM-DDTHH:MM'. Se concatena
-    # con segundos y se reemplaza la 'T' por espacio para que calce
-    # exactamente con el formato 'YYYY-MM-DD HH:MM:SS' que guarda la BD.
+
     start_norm = start.replace("T", " ") + ":00"
     end_norm = end.replace("T", " ") + ":59"
 
@@ -551,7 +547,7 @@ def api_history_range():
 @app.route("/api/passages")
 def api_passages():
     """Busca en qué momentos el camión pasó cerca de un punto elegido en el
-    mapa. Parámetros (query string):
+    mapa, según la hora real del GPS (gps_time). Parámetros (query string):
       lat, lon   = coordenadas del punto seleccionado (obligatorios)
       radius     = radio de búsqueda en metros (opcional, default 100)
       start, end = 'YYYY-MM-DDTHH:MM' (opcionales, mismo formato que

@@ -15,6 +15,7 @@ jobs:
       - name: Pull and restart (test)
         run: |
           cd ~/GPSCAMION-test
+          git fetch origin
           git checkout ${{ github.ref_name }}
           git pull --no-rebase origin ${{ github.ref_name }}
           sudo systemctl restart GPSCAMION-test

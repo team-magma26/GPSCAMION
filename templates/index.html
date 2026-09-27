@@ -184,6 +184,90 @@
   #passagesBanner ul { margin: 8px 0 0 18px; padding: 0; }
   #passagesBanner li { margin-bottom: 4px; }
 
+  /* ---------- Modal de validación (reemplaza los alert() nativos) ---------- */
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.55);
+    z-index: 1000;
+    align-items: center;
+    justify-content: center;
+  }
+  .modal-overlay.open { display: flex; }
+  .modal-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    box-shadow: 0 8px 30px rgba(0,0,0,.5);
+    padding: 22px 24px;
+    max-width: 380px;
+    width: 90%;
+  }
+  .modal-card p {
+    margin: 0 0 16px;
+    font-size: 14px;
+    line-height: 1.5;
+    color: #ffffff;
+  }
+  .modal-card .btn { width: 100%; }
+
+  /* ---------- Selector de recorridos guardados ---------- */
+  select.session-select {
+    background: var(--bg);
+    color: #ffffff;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-family: inherit;
+    font-size: 13px;
+    max-width: 260px;
+  }
+
+  /* ---------- Leyenda de recorridos históricos superpuestos ---------- */
+  #routesLegend {
+    display: none;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 14px;
+  }
+  #routesLegend .route-chip {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 6px 10px 6px 8px;
+    font-size: 12px;
+    color: #ffffff;
+  }
+  #routesLegend .route-color {
+    width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0;
+  }
+  #routesLegend .route-remove {
+    background: none;
+    border: none;
+    color: var(--muted);
+    cursor: pointer;
+    font-size: 13px;
+    line-height: 1;
+    padding: 0;
+  }
+  #routesLegend .route-remove:hover { color: #ffffff; }
+
+  /* Marcadores de inicio/fin de cada recorrido histórico */
+  .route-endpoint {
+    width: 22px; height: 22px;
+    display: grid; place-items: center;
+    border-radius: 50%;
+    color: #0d1b2a;
+    font-weight: bold;
+    font-size: 11px;
+    border: 2px solid #0d1b2a;
+    box-shadow: 0 2px 8px rgba(0,0,0,.5);
+  }
+
   #map {
     width: 100%;
     height: 560px;
@@ -282,8 +366,20 @@
       <div class="group-body">
         <label class="date-field">Desde <input type="datetime-local" id="rangeStart"></label>
         <label class="date-field">Hasta <input type="datetime-local" id="rangeEnd"></label>
-        <button class="btn primary" id="searchHistory">Ver recorrido</button>
-        <button class="btn history" id="backToLive" style="display:none;">Volver a en vivo</button>
+        <button class="btn primary" id="searchHistory">Agregar recorrido</button>
+        <button class="btn history" id="backToLive" style="display:none;">Limpiar y volver a en vivo</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="group grow">
+      <span class="group-title">Recorridos guardados</span>
+      <div class="group-body">
+        <select id="sessionSelect" class="session-select">
+          <option value="">Cargando recorridos…</option>
+        </select>
+        <button class="btn primary" id="viewSavedSession">Agregar al mapa</button>
       </div>
     </div>
   </section>
@@ -300,6 +396,7 @@
   </section>
 
   <div id="historyBanner"></div>
+  <div id="routesLegend"></div>
   <div id="passagesBanner"></div>
 
   <div id="map"></div>
@@ -315,6 +412,13 @@
   </section>
 
 </main>
+
+<div class="modal-overlay" id="appModal">
+  <div class="modal-card">
+    <p id="modalMessage"></p>
+    <button class="btn primary" id="modalOk">Entendido</button>
+  </div>
+</div>
 
 <script>
 
@@ -337,13 +441,120 @@
   // Recorrido real del vehículo en tiempo real.
   const trail = L.polyline([], { color: "#2ecc71", weight: 4, opacity: 0.85 }).addTo(map);
 
-  // Recorrido histórico consultado por rango de fecha/hora (con suavizado propio Catmull-Rom).
-  const historyTrail = L.polyline([], {
-    color: "#c2410c",
-    weight: 4,
-    opacity: 0.9,
-    smoothFactor: 1.5
-  }).addTo(map);
+  // Recorridos históricos superpuestos (rango de fechas o recorrido guardado).
+  // Cada uno se dibuja con su propio color para poder compararlos en el mapa.
+  const ROUTE_COLORS = ["#c2410c", "#2ecc71", "#8ecae6", "#e63946", "#ffb703", "#9b5de5", "#00b4d8", "#f4a261"];
+  const historyRoutes = [];
+  let routeCounter = 0;
+  const routesLayer = L.layerGroup().addTo(map);
+
+  // --- Modal de validación (reemplaza los alert() nativos) ---
+  const appModal = document.getElementById("appModal");
+  const modalMessage = document.getElementById("modalMessage");
+  document.getElementById("modalOk").addEventListener("click", () => appModal.classList.remove("open"));
+  function showAlert(message) {
+    modalMessage.textContent = message;
+    appModal.classList.add("open");
+  }
+
+  function endpointIcon(letter, color) {
+    return L.divIcon({
+      className: "",
+      html: `<div class="route-endpoint" style="background:${color}">${letter}</div>`,
+      iconSize: [22, 22],
+      iconAnchor: [11, 11],
+    });
+  }
+
+  function renderRoutesLegend() {
+    const legend = document.getElementById("routesLegend");
+    if (historyRoutes.length === 0) {
+      legend.style.display = "none";
+      legend.innerHTML = "";
+      return;
+    }
+    legend.style.display = "flex";
+    legend.innerHTML = historyRoutes.map((r) => `
+      <span class="route-chip">
+        <span class="route-color" style="background:${r.color}"></span>
+        ${r.label}
+        <button class="route-remove" data-route-id="${r.id}" title="Quitar este recorrido">✕</button>
+      </span>
+    `).join("");
+    legend.querySelectorAll(".route-remove").forEach((btn) => {
+      btn.addEventListener("click", () => removeHistoryRoute(Number(btn.dataset.routeId)));
+    });
+  }
+
+  function addHistoryRoute(points, label) {
+    const latlngs = points.map((p) => [p.lat, p.lon]);
+    const color = ROUTE_COLORS[routeCounter % ROUTE_COLORS.length];
+    const id = routeCounter++;
+
+    const polyline = L.polyline(catmullRomSpline(latlngs, 8), {
+      color, weight: 4, opacity: 0.9, smoothFactor: 1.5,
+    }).addTo(routesLayer);
+
+    let startMarker = null;
+    let endMarker = null;
+    if (points.length > 0) {
+      const first = points[0];
+      const last = points[points.length - 1];
+
+      startMarker = L.marker([first.lat, first.lon], { icon: endpointIcon("A", color) })
+        .bindPopup(`<strong>Inicio</strong><br>${first.time}<br>Lat: ${first.lat.toFixed(5)}, Lon: ${first.lon.toFixed(5)}`)
+        .addTo(routesLayer);
+
+      endMarker = L.marker([last.lat, last.lon], { icon: endpointIcon("B", color) })
+        .bindPopup(`<strong>Fin</strong><br>${last.time}<br>Lat: ${last.lat.toFixed(5)}, Lon: ${last.lon.toFixed(5)}`)
+        .addTo(routesLayer);
+    }
+
+    historyRoutes.push({ id, polyline, startMarker, endMarker, color, label });
+    renderRoutesLegend();
+
+    viewingHistory = true;
+    trail.setLatLngs([]); // oculta el trazo en vivo mientras se ve el histórico
+    document.getElementById("backToLive").style.display = "inline-block";
+
+    if (latlngs.length > 0) {
+      const allBounds = L.featureGroup(historyRoutes.map((r) => r.polyline)).getBounds();
+      map.fitBounds(allBounds, { maxZoom: 15, padding: [20, 20] });
+    }
+
+    return points.length;
+  }
+
+  function removeHistoryRoute(id) {
+    const idx = historyRoutes.findIndex((r) => r.id === id);
+    if (idx === -1) return;
+    const [route] = historyRoutes.splice(idx, 1);
+    routesLayer.removeLayer(route.polyline);
+    if (route.startMarker) routesLayer.removeLayer(route.startMarker);
+    if (route.endMarker) routesLayer.removeLayer(route.endMarker);
+    renderRoutesLegend();
+
+    if (historyRoutes.length === 0) {
+      backToLiveView();
+    }
+  }
+
+  function clearHistoryRoutes() {
+    routesLayer.clearLayers();
+    historyRoutes.length = 0;
+    renderRoutesLegend();
+  }
+
+  function backToLiveView() {
+    viewingHistory = false;
+    clearHistoryRoutes();
+    document.getElementById("backToLive").style.display = "none";
+    document.getElementById("historyBanner").style.display = "none";
+
+    fetch("/api/history")
+      .then((r) => r.json())
+      .then((points) => trail.setLatLngs(points.map((p) => [p.lat, p.lon])));
+  }
 
   let mapCentered = false;
   let followTruck = true;
@@ -418,6 +629,45 @@
     return result;
   }
 
+  // --- Calendario bloqueado: nunca se puede elegir una fecha/hora futura ---
+
+  function localDatetimeString(date) {
+    const offsetMs = date.getTimezoneOffset() * 60000;
+    return new Date(date.getTime() - offsetMs).toISOString().slice(0, 16);
+  }
+
+  function updateDateLimits() {
+    const nowStr = localDatetimeString(new Date());
+    document.getElementById("rangeStart").max = nowStr;
+    document.getElementById("rangeEnd").max = nowStr;
+  }
+  updateDateLimits();
+  setInterval(updateDateLimits, 30000);
+
+  // --- Validación del rango de fecha/hora elegido, con popup en vez de alert() nativo ---
+
+  function validateRange(start, end) {
+    if (!start || !end) {
+      showAlert("Selecciona fecha y hora de inicio y fin.");
+      return false;
+    }
+
+    const nowStr = localDatetimeString(new Date());
+    if (start > nowStr) {
+      showAlert("La fecha/hora 'Desde' no puede ser futura.");
+      return false;
+    }
+    if (end > nowStr) {
+      showAlert("La fecha/hora 'Hasta' no puede ser futura.");
+      return false;
+    }
+    if (start > end) {
+      showAlert("La fecha/hora 'Desde' no puede ser posterior a 'Hasta'.");
+      return false;
+    }
+    return true;
+  }
+
   // --- Búsqueda de recorrido histórico por rango de fecha/hora ---
 
   document.getElementById("searchHistory").addEventListener("click", () => {
@@ -425,49 +675,76 @@
     const end = document.getElementById("rangeEnd").value;
     const banner = document.getElementById("historyBanner");
 
-    if (!start || !end) {
-      alert("Selecciona fecha y hora de inicio y fin");
-      return;
-    }
+    if (!validateRange(start, end)) return;
 
     fetch(`/api/history_range?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`)
       .then((r) => r.json())
       .then((data) => {
         if (data.error) {
-          alert(data.error);
+          showAlert(data.error);
           return;
         }
 
-        const latlngs = data.points.map((p) => [p.lat, p.lon]);
-        const smoothed = catmullRomSpline(latlngs, 8);
+        const label = `${start.replace("T", " ")} → ${end.replace("T", " ")}`;
+        const count = addHistoryRoute(data.points, label);
 
-        viewingHistory = true;
-        trail.setLatLngs([]); // oculta el trazo en vivo mientras se ve el histórico
-        historyTrail.setLatLngs(smoothed);
-
-        if (latlngs.length > 0) {
-          map.fitBounds(historyTrail.getBounds(), { maxZoom: 15, padding: [20, 20] });
-          banner.style.display = "block";
-          banner.textContent = `Mostrando recorrido histórico: ${data.count} puntos entre ${start.replace("T", " ")} y ${end.replace("T", " ")}`;
-        } else {
-          banner.style.display = "block";
-          banner.textContent = "No hay puntos registrados en ese rango de fechas";
-        }
-
-        document.getElementById("backToLive").style.display = "inline-block";
+        banner.style.display = "block";
+        banner.textContent = count > 0
+          ? `Recorrido agregado: ${count} puntos entre ${label}`
+          : `No hay puntos registrados entre ${label}`;
       })
-      .catch(() => alert("Error consultando el historial"));
+      .catch(() => showAlert("Error consultando el historial"));
   });
 
-  document.getElementById("backToLive").addEventListener("click", () => {
-    viewingHistory = false;
-    historyTrail.setLatLngs([]);
-    document.getElementById("backToLive").style.display = "none";
-    document.getElementById("historyBanner").style.display = "none";
+  document.getElementById("backToLive").addEventListener("click", backToLiveView);
 
-    fetch("/api/history")
+  // --- Recorridos guardados (sesiones ya registradas) ---
+
+  const sessionSelect = document.getElementById("sessionSelect");
+
+  fetch("/api/sessions")
+    .then((r) => r.json())
+    .then((data) => {
+      sessionSelect.innerHTML = "";
+      if (!data.sessions || data.sessions.length === 0) {
+        sessionSelect.innerHTML = '<option value="">No hay recorridos guardados</option>';
+        return;
+      }
+      data.sessions.forEach((s) => {
+        const opt = document.createElement("option");
+        opt.value = s.session_id;
+        opt.textContent = `${s.start_time} → ${s.end_time} (${s.points} pts)`;
+        sessionSelect.appendChild(opt);
+      });
+    })
+    .catch(() => {
+      sessionSelect.innerHTML = '<option value="">Error cargando recorridos</option>';
+    });
+
+  document.getElementById("viewSavedSession").addEventListener("click", () => {
+    const sessionId = sessionSelect.value;
+    if (!sessionId) {
+      showAlert("Selecciona un recorrido guardado de la lista.");
+      return;
+    }
+
+    const label = sessionSelect.options[sessionSelect.selectedIndex].textContent;
+
+    fetch(`/api/session_route?session_id=${encodeURIComponent(sessionId)}`)
       .then((r) => r.json())
-      .then((points) => trail.setLatLngs(points.map((p) => [p.lat, p.lon])));
+      .then((data) => {
+        if (data.error) {
+          showAlert(data.error);
+          return;
+        }
+        const count = addHistoryRoute(data.points, label);
+        const banner = document.getElementById("historyBanner");
+        banner.style.display = "block";
+        banner.textContent = count > 0
+          ? `Recorrido guardado agregado: ${count} puntos (${label})`
+          : `Ese recorrido guardado no tiene puntos`;
+      })
+      .catch(() => showAlert("Error consultando el recorrido guardado"));
   });
 
   // 1) Cargar el historial para dibujar el recorrido ya hecho antes de conectarnos en vivo.
@@ -536,6 +813,8 @@
     document.getElementById("status").textContent = "Haz clic en el mapa para elegir el punto…";
   });
 
+
+
   map.on("click", (e) => {
     if (!pickingLocation) return;
     pickingLocation = false;
@@ -553,7 +832,7 @@
 
   document.getElementById("searchPassages").addEventListener("click", () => {
     if (!placeMarker) {
-      alert("Primero selecciona un punto en el mapa");
+      showAlert("Primero selecciona un punto en el mapa");
       return;
     }
 
@@ -561,6 +840,12 @@
     const start = document.getElementById("rangeStart").value;
     const end = document.getElementById("rangeEnd").value;
     const banner = document.getElementById("passagesBanner");
+
+    if ((start && !end) || (!start && end)) {
+      showAlert("Si vas a acotar por fecha, selecciona tanto 'Desde' como 'Hasta'.");
+      return;
+    }
+    if (start && end && !validateRange(start, end)) return;
 
     let url = `/api/passages?lat=${lat}&lon=${lng}&radius=${PASSAGE_RADIUS_M}`;
     if (start && end) {
@@ -571,7 +856,7 @@
       .then((r) => r.json())
       .then((data) => {
         if (data.error) {
-          alert(data.error);
+          showAlert(data.error);
           return;
         }
 
@@ -597,7 +882,7 @@
 
         document.getElementById("clearPassages").style.display = "inline-block";
       })
-      .catch(() => alert("Error consultando las pasadas por ese punto"));
+      .catch(() => showAlert("Error consultando las pasadas por ese punto"));
   });
 
   document.getElementById("clearPassages").addEventListener("click", () => {

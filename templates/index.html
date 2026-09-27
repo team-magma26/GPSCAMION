@@ -212,49 +212,53 @@
   }
   .modal-card .btn { width: 100%; }
 
-  /* ---------- Selector de recorridos guardados ---------- */
-  select.session-select {
-    background: var(--bg);
-    color: #ffffff;
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 8px 10px;
-    font-family: inherit;
-    font-size: 13px;
-    max-width: 260px;
-  }
-
-  /* ---------- Leyenda de recorridos históricos superpuestos ---------- */
-  #routesLegend {
+  /* ---------- Tabla de recorridos (colapsable) ---------- */
+  #routesTablePanel {
     display: none;
-    flex-wrap: wrap;
-    gap: 8px;
-    margin-bottom: 14px;
-  }
-  #routesLegend .route-chip {
-    display: flex;
-    align-items: center;
-    gap: 8px;
     background: var(--card);
     border: 1px solid var(--border);
-    border-radius: 999px;
-    padding: 6px 10px 6px 8px;
-    font-size: 12px;
-    color: #ffffff;
+    border-radius: 12px;
+    padding: 10px 18px;
+    margin-bottom: 14px;
+    max-height: 320px;
+    overflow-y: auto;
   }
-  #routesLegend .route-color {
-    width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0;
-  }
-  #routesLegend .route-remove {
-    background: none;
-    border: none;
-    color: var(--muted);
-    cursor: pointer;
+  #routesTablePanel.open { display: block; }
+  table.routes-table {
+    width: 100%;
+    border-collapse: collapse;
     font-size: 13px;
-    line-height: 1;
-    padding: 0;
   }
-  #routesLegend .route-remove:hover { color: #ffffff; }
+  table.routes-table th {
+    text-align: left;
+    padding: 8px 10px;
+    color: var(--muted);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+    border-bottom: 1px solid var(--border);
+  }
+  table.routes-table td {
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--border);
+  }
+  table.routes-table tr:last-child td { border-bottom: none; }
+  table.routes-table tr.todos-row td {
+    font-weight: bold;
+    color: var(--accent);
+  }
+  table.routes-table input[type="checkbox"] {
+    width: 16px; height: 16px;
+    accent-color: var(--accent);
+    cursor: pointer;
+  }
+  .route-swatch {
+    width: 12px; height: 12px;
+    border-radius: 50%;
+    display: inline-block;
+    margin-right: 8px;
+    vertical-align: middle;
+  }
 
   /* Marcadores de inicio/fin de cada recorrido histórico */
   .route-endpoint {
@@ -364,31 +368,33 @@
     <div class="group grow">
       <span class="group-title">Recorrido histórico</span>
       <div class="group-body">
-        <label class="date-field">Desde <input type="datetime-local" id="rangeStart"></label>
-        <label class="date-field">Hasta <input type="datetime-local" id="rangeEnd"></label>
-        <button class="btn primary" id="searchHistory">Agregar recorrido</button>
+        <button class="btn primary" id="toggleRoutesTable">Ver tabla de recorridos</button>
         <button class="btn history" id="backToLive" style="display:none;">Limpiar y volver a en vivo</button>
       </div>
     </div>
   </section>
 
-  <section class="panel">
-    <div class="group grow">
-      <span class="group-title">Recorridos guardados</span>
-      <div class="group-body">
-        <select id="sessionSelect" class="session-select">
-          <option value="">Cargando recorridos…</option>
-        </select>
-        <button class="btn primary" id="viewSavedSession">Agregar al mapa</button>
-      </div>
-    </div>
-  </section>
+  <div id="routesTablePanel">
+    <table class="routes-table">
+      <thead>
+        <tr><th></th><th>Recorrido</th><th>Puntos</th></tr>
+      </thead>
+      <tbody id="routesTableBody">
+        <tr class="todos-row">
+          <td><input type="checkbox" id="routesTodosCheckbox" checked></td>
+          <td colspan="2">Todos</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
 
   <section class="panel">
     <div class="group grow">
       <span class="group-title">Buscar por lugar</span>
       <div class="group-body">
         <button class="btn" id="pickLocationBtn">Seleccionar punto en el mapa</button>
+        <label class="date-field">Desde <input type="datetime-local" id="passageStart"></label>
+        <label class="date-field">Hasta <input type="datetime-local" id="passageEnd"></label>
         <button class="btn primary" id="searchPassages">Buscar pasadas</button>
         <button class="btn history" id="clearPassages" style="display:none;">Limpiar búsqueda</button>
       </div>
@@ -396,7 +402,6 @@
   </section>
 
   <div id="historyBanner"></div>
-  <div id="routesLegend"></div>
   <div id="passagesBanner"></div>
 
   <div id="map"></div>
@@ -441,12 +446,12 @@
   // Recorrido real del vehículo en tiempo real.
   const trail = L.polyline([], { color: "#2ecc71", weight: 4, opacity: 0.85 }).addTo(map);
 
-  // Recorridos históricos superpuestos (rango de fechas o recorrido guardado).
-  // Cada uno se dibuja con su propio color para poder compararlos en el mapa.
+  // Recorridos históricos (uno por cada sesión/recorrido ya guardado).
+  // Cada uno se dibuja con su propio color, y se puede mostrar u ocultar
+  // desde la tabla de recorridos sin perder los datos ya cargados.
   const ROUTE_COLORS = ["#c2410c", "#2ecc71", "#8ecae6", "#e63946", "#ffb703", "#9b5de5", "#00b4d8", "#f4a261"];
-  const historyRoutes = [];
-  let routeCounter = 0;
   const routesLayer = L.layerGroup().addTo(map);
+  const routesBySession = new Map(); // session_id -> { color, points, polyline, startMarker, endMarker, visible }
 
   // --- Modal de validación (reemplaza los alert() nativos) ---
   const appModal = document.getElementById("appModal");
@@ -466,90 +471,83 @@
     });
   }
 
-  function renderRoutesLegend() {
-    const legend = document.getElementById("routesLegend");
-    if (historyRoutes.length === 0) {
-      legend.style.display = "none";
-      legend.innerHTML = "";
-      return;
-    }
-    legend.style.display = "flex";
-    legend.innerHTML = historyRoutes.map((r) => `
-      <span class="route-chip">
-        <span class="route-color" style="background:${r.color}"></span>
-        ${r.label}
-        <button class="route-remove" data-route-id="${r.id}" title="Quitar este recorrido">✕</button>
-      </span>
-    `).join("");
-    legend.querySelectorAll(".route-remove").forEach((btn) => {
-      btn.addEventListener("click", () => removeHistoryRoute(Number(btn.dataset.routeId)));
-    });
-  }
+  function drawRoute(route) {
+    const latlngs = route.points.map((p) => [p.lat, p.lon]);
 
-  function addHistoryRoute(points, label) {
-    const latlngs = points.map((p) => [p.lat, p.lon]);
-    const color = ROUTE_COLORS[routeCounter % ROUTE_COLORS.length];
-    const id = routeCounter++;
-
-    const polyline = L.polyline(catmullRomSpline(latlngs, 8), {
-      color, weight: 4, opacity: 0.9, smoothFactor: 1.5,
+    route.polyline = L.polyline(catmullRomSpline(latlngs, 8), {
+      color: route.color, weight: 4, opacity: 0.9, smoothFactor: 1.5,
     }).addTo(routesLayer);
 
-    let startMarker = null;
-    let endMarker = null;
-    if (points.length > 0) {
-      const first = points[0];
-      const last = points[points.length - 1];
+    if (route.points.length > 0) {
+      const first = route.points[0];
+      const last = route.points[route.points.length - 1];
 
-      startMarker = L.marker([first.lat, first.lon], { icon: endpointIcon("A", color) })
+      route.startMarker = L.marker([first.lat, first.lon], { icon: endpointIcon("A", route.color) })
         .bindPopup(`<strong>Inicio</strong><br>${first.time}<br>Lat: ${first.lat.toFixed(5)}, Lon: ${first.lon.toFixed(5)}`)
         .addTo(routesLayer);
 
-      endMarker = L.marker([last.lat, last.lon], { icon: endpointIcon("B", color) })
+      route.endMarker = L.marker([last.lat, last.lon], { icon: endpointIcon("B", route.color) })
         .bindPopup(`<strong>Fin</strong><br>${last.time}<br>Lat: ${last.lat.toFixed(5)}, Lon: ${last.lon.toFixed(5)}`)
         .addTo(routesLayer);
     }
-
-    historyRoutes.push({ id, polyline, startMarker, endMarker, color, label });
-    renderRoutesLegend();
-
-    viewingHistory = true;
-    trail.setLatLngs([]); // oculta el trazo en vivo mientras se ve el histórico
-    document.getElementById("backToLive").style.display = "inline-block";
-
-    if (latlngs.length > 0) {
-      const allBounds = L.featureGroup(historyRoutes.map((r) => r.polyline)).getBounds();
-      map.fitBounds(allBounds, { maxZoom: 15, padding: [20, 20] });
-    }
-
-    return points.length;
   }
 
-  function removeHistoryRoute(id) {
-    const idx = historyRoutes.findIndex((r) => r.id === id);
-    if (idx === -1) return;
-    const [route] = historyRoutes.splice(idx, 1);
-    routesLayer.removeLayer(route.polyline);
+  function undrawRoute(route) {
+    if (route.polyline) routesLayer.removeLayer(route.polyline);
     if (route.startMarker) routesLayer.removeLayer(route.startMarker);
     if (route.endMarker) routesLayer.removeLayer(route.endMarker);
-    renderRoutesLegend();
-
-    if (historyRoutes.length === 0) {
-      backToLiveView();
-    }
+    route.polyline = null;
+    route.startMarker = null;
+    route.endMarker = null;
   }
 
-  function clearHistoryRoutes() {
-    routesLayer.clearLayers();
-    historyRoutes.length = 0;
-    renderRoutesLegend();
+  function setRouteVisible(sessionId, visible) {
+    const route = routesBySession.get(sessionId);
+    if (!route || route.visible === visible) return;
+    route.visible = visible;
+    if (visible) {
+      drawRoute(route);
+    } else {
+      undrawRoute(route);
+    }
+    updateHistoryViewState();
+  }
+
+  function anyRouteVisible() {
+    for (const route of routesBySession.values()) {
+      if (route.visible) return true;
+    }
+    return false;
+  }
+
+  function updateHistoryViewState() {
+    const active = anyRouteVisible();
+    viewingHistory = active;
+    document.getElementById("backToLive").style.display = active ? "inline-block" : "none";
+
+    const banner = document.getElementById("historyBanner");
+    const visibleCount = [...routesBySession.values()].filter((r) => r.visible).length;
+    if (routesBySession.size > 0) {
+      banner.style.display = "block";
+      banner.textContent = `Mostrando ${visibleCount} de ${routesBySession.size} recorrido(s) guardado(s)`;
+    } else {
+      banner.style.display = "none";
+    }
+
+    if (active) {
+      trail.setLatLngs([]); // oculta el trazo en vivo mientras se ven recorridos históricos
+      const visiblePolylines = [...routesBySession.values()]
+        .filter((r) => r.visible && r.polyline)
+        .map((r) => r.polyline);
+      if (visiblePolylines.length > 0) {
+        map.fitBounds(L.featureGroup(visiblePolylines).getBounds(), { maxZoom: 15, padding: [20, 20] });
+      }
+    }
   }
 
   function backToLiveView() {
-    viewingHistory = false;
-    clearHistoryRoutes();
-    document.getElementById("backToLive").style.display = "none";
-    document.getElementById("historyBanner").style.display = "none";
+    document.getElementById("routesTodosCheckbox").checked = false;
+    setAllRoutesVisible(false);
 
     fetch("/api/history")
       .then((r) => r.json())
@@ -630,6 +628,7 @@
   }
 
   // --- Calendario bloqueado: nunca se puede elegir una fecha/hora futura ---
+  // (aplica a los campos de fecha del buscador "por lugar")
 
   function localDatetimeString(date) {
     const offsetMs = date.getTimezoneOffset() * 60000;
@@ -638,8 +637,8 @@
 
   function updateDateLimits() {
     const nowStr = localDatetimeString(new Date());
-    document.getElementById("rangeStart").max = nowStr;
-    document.getElementById("rangeEnd").max = nowStr;
+    document.getElementById("passageStart").max = nowStr;
+    document.getElementById("passageEnd").max = nowStr;
   }
   updateDateLimits();
   setInterval(updateDateLimits, 30000);
@@ -668,84 +667,83 @@
     return true;
   }
 
-  // --- Búsqueda de recorrido histórico por rango de fecha/hora ---
-
-  document.getElementById("searchHistory").addEventListener("click", () => {
-    const start = document.getElementById("rangeStart").value;
-    const end = document.getElementById("rangeEnd").value;
-    const banner = document.getElementById("historyBanner");
-
-    if (!validateRange(start, end)) return;
-
-    fetch(`/api/history_range?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`)
-      .then((r) => r.json())
-      .then((data) => {
-        if (data.error) {
-          showAlert(data.error);
-          return;
-        }
-
-        const label = `${start.replace("T", " ")} → ${end.replace("T", " ")}`;
-        const count = addHistoryRoute(data.points, label);
-
-        banner.style.display = "block";
-        banner.textContent = count > 0
-          ? `Recorrido agregado: ${count} puntos entre ${label}`
-          : `No hay puntos registrados entre ${label}`;
-      })
-      .catch(() => showAlert("Error consultando el historial"));
-  });
-
   document.getElementById("backToLive").addEventListener("click", backToLiveView);
 
-  // --- Recorridos guardados (sesiones ya registradas) ---
+  // --- Tabla de recorridos: un checkbox por recorrido guardado + "Todos" ---
 
-  const sessionSelect = document.getElementById("sessionSelect");
+  const todosCheckbox = document.getElementById("routesTodosCheckbox");
+  const routesTableBody = document.getElementById("routesTableBody");
+  const toggleRoutesTableBtn = document.getElementById("toggleRoutesTable");
+  const routesTablePanel = document.getElementById("routesTablePanel");
 
-  fetch("/api/sessions")
-    .then((r) => r.json())
-    .then((data) => {
-      sessionSelect.innerHTML = "";
-      if (!data.sessions || data.sessions.length === 0) {
-        sessionSelect.innerHTML = '<option value="">No hay recorridos guardados</option>';
-        return;
-      }
-      data.sessions.forEach((s) => {
-        const opt = document.createElement("option");
-        opt.value = s.session_id;
-        opt.textContent = `${s.start_time} → ${s.end_time} (${s.points} pts)`;
-        sessionSelect.appendChild(opt);
-      });
-    })
-    .catch(() => {
-      sessionSelect.innerHTML = '<option value="">Error cargando recorridos</option>';
+  toggleRoutesTableBtn.addEventListener("click", () => {
+    const isOpen = routesTablePanel.classList.toggle("open");
+    toggleRoutesTableBtn.textContent = isOpen ? "Ocultar tabla de recorridos" : "Ver tabla de recorridos";
+  });
+
+  function setAllRoutesVisible(visible) {
+    routesTableBody.querySelectorAll("tr[data-session-id] input[type=checkbox]").forEach((cb) => {
+      cb.checked = visible;
+      setRouteVisible(cb.closest("tr").dataset.sessionId, visible);
     });
+  }
 
-  document.getElementById("viewSavedSession").addEventListener("click", () => {
-    const sessionId = sessionSelect.value;
-    if (!sessionId) {
-      showAlert("Selecciona un recorrido guardado de la lista.");
-      return;
-    }
+  function syncTodosCheckbox() {
+    const boxes = [...routesTableBody.querySelectorAll("tr[data-session-id] input[type=checkbox]")];
+    todosCheckbox.checked = boxes.length > 0 && boxes.every((cb) => cb.checked);
+  }
 
-    const label = sessionSelect.options[sessionSelect.selectedIndex].textContent;
+  todosCheckbox.addEventListener("change", () => {
+    setAllRoutesVisible(todosCheckbox.checked);
+  });
 
-    fetch(`/api/session_route?session_id=${encodeURIComponent(sessionId)}`)
+  function loadRoutesTable() {
+    fetch("/api/sessions")
       .then((r) => r.json())
       .then((data) => {
-        if (data.error) {
-          showAlert(data.error);
-          return;
-        }
-        const count = addHistoryRoute(data.points, label);
-        const banner = document.getElementById("historyBanner");
-        banner.style.display = "block";
-        banner.textContent = count > 0
-          ? `Recorrido guardado agregado: ${count} puntos (${label})`
-          : `Ese recorrido guardado no tiene puntos`;
+        const sessions = data.sessions || [];
+
+        sessions.forEach((s, i) => {
+          routesBySession.set(s.session_id, {
+            color: ROUTE_COLORS[i % ROUTE_COLORS.length],
+            points: [],
+            polyline: null,
+            startMarker: null,
+            endMarker: null,
+            visible: false,
+          });
+
+          const row = document.createElement("tr");
+          row.dataset.sessionId = s.session_id;
+          row.innerHTML = `
+            <td><input type="checkbox" checked></td>
+            <td><span class="route-swatch" style="background:${ROUTE_COLORS[i % ROUTE_COLORS.length]}"></span>${s.start_time} → ${s.end_time}</td>
+            <td>${s.points}</td>
+          `;
+          const checkbox = row.querySelector("input[type=checkbox]");
+          checkbox.addEventListener("change", () => {
+            setRouteVisible(s.session_id, checkbox.checked);
+            syncTodosCheckbox();
+          });
+          routesTableBody.appendChild(row);
+        });
+
+        // Trae los puntos de todos los recorridos y, como "Todos" empieza
+        // marcado, los deja visibles en el mapa desde que carga la página.
+        return Promise.all(sessions.map((s) =>
+          fetch(`/api/session_route?session_id=${encodeURIComponent(s.session_id)}`)
+            .then((r) => r.json())
+            .then((routeData) => {
+              const route = routesBySession.get(s.session_id);
+              route.points = routeData.points || [];
+              setRouteVisible(s.session_id, true);
+            })
+            .catch(() => {})
+        ));
       })
-      .catch(() => showAlert("Error consultando el recorrido guardado"));
-  });
+      .catch(() => showAlert("Error cargando la tabla de recorridos"));
+  }
+  loadRoutesTable();
 
   // 1) Cargar el historial para dibujar el recorrido ya hecho antes de conectarnos en vivo.
   fetch("/api/history")
@@ -837,8 +835,8 @@
     }
 
     const { lat, lng } = placeMarker.getLatLng();
-    const start = document.getElementById("rangeStart").value;
-    const end = document.getElementById("rangeEnd").value;
+    const start = document.getElementById("passageStart").value;
+    const end = document.getElementById("passageEnd").value;
     const banner = document.getElementById("passagesBanner");
 
     if ((start && !end) || (!start && end)) {

@@ -212,7 +212,7 @@
   }
   .modal-card .btn { width: 100%; }
 
-  /* ---------- Tabla de recorridos (colapsable) ---------- */
+  /* ---------- Tabla de recorridos (colapsable, paginada) ---------- */
   #routesTablePanel {
     display: none;
     background: var(--card);
@@ -220,8 +220,6 @@
     border-radius: 12px;
     padding: 10px 18px;
     margin-bottom: 14px;
-    max-height: 320px;
-    overflow-y: auto;
   }
   #routesTablePanel.open { display: block; }
   table.routes-table {
@@ -259,6 +257,19 @@
     margin-right: 8px;
     vertical-align: middle;
   }
+
+  /* Paginador de la tabla */
+  .pager {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    padding-top: 10px;
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .pager .btn { padding: 4px 12px; }
+  .pager .btn:disabled { opacity: .35; cursor: default; }
 
   /* Marcadores de inicio/fin de cada recorrido histórico */
   .route-endpoint {
@@ -371,7 +382,6 @@
         <label class="date-field">Desde <input type="datetime-local" id="historyStart"></label>
         <label class="date-field">Hasta <input type="datetime-local" id="historyEnd"></label>
         <button class="btn primary" id="filterRoutesByDate">Filtrar por fecha</button>
-        <button class="btn history" id="clearDateFilter" style="display:none;">Quitar filtro</button>
         <button class="btn" id="toggleRoutesTable">Ver tabla de recorridos</button>
         <button class="btn history" id="backToLive" style="display:none;">Limpiar y volver a en vivo</button>
       </div>
@@ -390,6 +400,11 @@
         </tr>
       </tbody>
     </table>
+    <div class="pager">
+      <button class="btn" id="prevPage">‹</button>
+      <span id="pageInfo"></span>
+      <button class="btn" id="nextPage">›</button>
+    </div>
   </div>
 
   <section class="panel">
@@ -551,7 +566,11 @@
   function updateHistoryViewState() {
     const active = anyRouteVisible();
     viewingHistory = active;
-    document.getElementById("backToLive").style.display = active ? "inline-block" : "none";
+
+    // El botón de volver a en vivo aparece si hay recorridos marcados
+    // o si hay un filtro de fecha aplicado (aunque no haya dado resultados).
+    const showBack = active || currentFilterLabel !== null;
+    document.getElementById("backToLive").style.display = showBack ? "inline-block" : "none";
 
     const banner = document.getElementById("historyBanner");
     if (routesBySession.size === 0 && currentFilterLabel) {
@@ -573,8 +592,16 @@
   }
 
   function backToLiveView() {
-    document.getElementById("routesTodosCheckbox").checked = false;
-    setAllRoutesVisible(false);
+    const hadFilter = currentFilterLabel !== null;
+    document.getElementById("historyStart").value = "";
+    document.getElementById("historyEnd").value = "";
+    currentFilterLabel = null;
+
+    if (hadFilter) {
+      loadRoutesTable(); // recarga la tabla completa, sin filtro
+    } else {
+      setAllRoutesVisible(false);
+    }
 
     fetch("/api/history")
       .then((r) => r.json())
@@ -709,32 +736,67 @@
     toggleRoutesTableBtn.textContent = isOpen ? "Ocultar tabla de recorridos" : "Ver tabla de recorridos";
   });
 
+  const PAGE_SIZE = 5;
+  let sessionsList = [];
+  let currentPage = 0;
+  let currentFilterLabel = null; // ej. "2026-09-20 08:00 → 2026-09-25 20:00", o null si no hay filtro
+
   function setAllRoutesVisible(visible) {
-    routesTableBody.querySelectorAll("tr[data-session-id] input[type=checkbox]").forEach((cb) => {
-      cb.checked = visible;
-      setRouteVisible(cb.closest("tr").dataset.sessionId, visible);
-    });
+    routesBySession.forEach((_, sessionId) => setRouteVisible(sessionId, visible));
+    renderRoutesPage();
   }
 
   function syncTodosCheckbox() {
-    const boxes = [...routesTableBody.querySelectorAll("tr[data-session-id] input[type=checkbox]")];
-    todosCheckbox.checked = boxes.length > 0 && boxes.every((cb) => cb.checked);
+    const routes = [...routesBySession.values()];
+    todosCheckbox.checked = routes.length > 0 && routes.every((r) => r.visible);
   }
+
+  function renderRoutesPage() {
+    routesTableBody.querySelectorAll("tr[data-session-id]").forEach((tr) => tr.remove());
+
+    const totalPages = Math.max(1, Math.ceil(sessionsList.length / PAGE_SIZE));
+    currentPage = Math.min(currentPage, totalPages - 1);
+    const pageItems = sessionsList.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE);
+
+    pageItems.forEach((s) => {
+      const route = routesBySession.get(s.session_id);
+      const row = document.createElement("tr");
+      row.dataset.sessionId = s.session_id;
+      row.innerHTML = `
+        <td><input type="checkbox"${route.visible ? " checked" : ""}></td>
+        <td><span class="route-swatch" style="background:${route.color}"></span>${s.start_time} → ${s.end_time}</td>
+        <td>${s.points}</td>
+      `;
+      row.querySelector("input").addEventListener("change", (e) => {
+        setRouteVisible(s.session_id, e.target.checked);
+        syncTodosCheckbox();
+      });
+      routesTableBody.appendChild(row);
+    });
+
+    document.getElementById("pageInfo").textContent =
+      sessionsList.length === 0 ? "Sin recorridos" : `Página ${currentPage + 1} de ${totalPages}`;
+    document.getElementById("prevPage").disabled = currentPage === 0;
+    document.getElementById("nextPage").disabled = currentPage >= totalPages - 1;
+    syncTodosCheckbox();
+  }
+
+  document.getElementById("prevPage").addEventListener("click", () => { currentPage--; renderRoutesPage(); });
+  document.getElementById("nextPage").addEventListener("click", () => { currentPage++; renderRoutesPage(); });
 
   todosCheckbox.addEventListener("change", () => {
     setAllRoutesVisible(todosCheckbox.checked);
   });
 
-  let currentFilterLabel = null; // ej. "2026-09-20 08:00 → 2026-09-25 20:00", o null si no hay filtro
-
   function clearRoutesTable() {
     routesBySession.forEach((route) => undrawRoute(route));
     routesBySession.clear();
-    routesTableBody.querySelectorAll("tr[data-session-id]").forEach((tr) => tr.remove());
+    sessionsList = [];
+    currentPage = 0;
     todosCheckbox.checked = false;
   }
 
-  // Al cargar la página (o al quitar el filtro) solo se puebla la tabla,
+  // Al cargar la página (o al limpiar el filtro) solo se puebla la tabla,
   // sin dibujar nada en el mapa: se entra siempre en vivo. Solo cuando el
   // usuario filtra por fecha (una búsqueda explícita) se muestran de una
   // vez los recorridos encontrados.
@@ -750,45 +812,22 @@
     fetch(url)
       .then((r) => r.json())
       .then((data) => {
-        if (data.error) {
-          showAlert(data.error);
-          return;
-        }
-        const sessions = data.sessions || [];
+        if (data.error) { showAlert(data.error); return; }
+        sessionsList = data.sessions || [];
 
-        sessions.forEach((s, i) => {
+        sessionsList.forEach((s, i) => {
           routesBySession.set(s.session_id, {
             color: ROUTE_COLORS[i % ROUTE_COLORS.length],
-            points: [],
-            polyline: null,
-            startMarker: null,
-            endMarker: null,
-            visible: false,
-            loaded: false,
-            loading: false,
+            points: [], polyline: null, startMarker: null, endMarker: null,
+            visible: false, loaded: false, loading: false,
           });
-
-          const row = document.createElement("tr");
-          row.dataset.sessionId = s.session_id;
-          row.innerHTML = `
-            <td><input type="checkbox"${autoShow ? " checked" : ""}></td>
-            <td><span class="route-swatch" style="background:${ROUTE_COLORS[i % ROUTE_COLORS.length]}"></span>${s.start_time} → ${s.end_time}</td>
-            <td>${s.points}</td>
-          `;
-          const checkbox = row.querySelector("input[type=checkbox]");
-          checkbox.addEventListener("change", () => {
-            setRouteVisible(s.session_id, checkbox.checked);
-            syncTodosCheckbox();
-          });
-          routesTableBody.appendChild(row);
         });
 
-        todosCheckbox.checked = autoShow && sessions.length > 0;
-        updateHistoryViewState(); // refleja de una vez el caso "0 recorridos" del filtro
-
         if (autoShow) {
-          sessions.forEach((s) => setRouteVisible(s.session_id, true));
+          sessionsList.forEach((s) => setRouteVisible(s.session_id, true));
         }
+        renderRoutesPage();
+        updateHistoryViewState();
       })
       .catch(() => showAlert("Error cargando la tabla de recorridos"));
   }
@@ -805,17 +844,8 @@
     currentFilterLabel = `${start.replace("T", " ")} → ${end.replace("T", " ")}`;
     loadRoutesTable(start, end);
 
-    document.getElementById("clearDateFilter").style.display = "inline-block";
     routesTablePanel.classList.add("open");
     toggleRoutesTableBtn.textContent = "Ocultar tabla de recorridos";
-  });
-
-  document.getElementById("clearDateFilter").addEventListener("click", () => {
-    document.getElementById("historyStart").value = "";
-    document.getElementById("historyEnd").value = "";
-    document.getElementById("clearDateFilter").style.display = "none";
-    currentFilterLabel = null;
-    loadRoutesTable();
   });
 
   // 1) Cargar el historial para dibujar el recorrido ya hecho antes de conectarnos en vivo.
@@ -883,8 +913,6 @@
     pickingLocation = true;
     document.getElementById("status").textContent = "Haz clic en el mapa para elegir el punto…";
   });
-
-
 
   map.on("click", (e) => {
     if (!pickingLocation) return;

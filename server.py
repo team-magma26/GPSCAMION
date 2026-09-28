@@ -390,8 +390,8 @@ def get_passages_near(target_lat: float, target_lon: float, radius_m: float,
     params += [radius_m, max_points]
 
     query = f"""
-        SELECT lat, lon, gps_time, received_at, distance_m FROM (
-            SELECT lat, lon, gps_time, received_at,
+        SELECT lat, lon, gps_time, received_at, session_id, distance_m FROM (
+            SELECT lat, lon, gps_time, received_at, session_id,
                 6371000 * acos(
                     LEAST(1.0, GREATEST(-1.0,
                         cos(radians(%s)) * cos(radians(lat)) * cos(radians(lon) - radians(%s)) +
@@ -420,18 +420,23 @@ def get_passages_near(target_lat: float, target_lon: float, radius_m: float,
 
 
 def group_passages(rows, gap_seconds: int = PASSAGE_GAP_SECONDS):
-    """Agrupa filas (lat, lon, gps_time, received_at, distance_m) ordenadas
-    por gps_time en "pasadas": si el camión estuvo cerca del punto en varias
-    lecturas seguidas (menos de gap_seconds entre una y otra, medido con la
-    hora real del GPS), se reporta como una sola pasada con su hora de
-    entrada y de salida, en vez de listar cada lectura individual.
+    """Agrupa filas (lat, lon, gps_time, received_at, session_id, distance_m)
+    ordenadas por gps_time en "pasadas": si el camión estuvo cerca del punto
+    en varias lecturas seguidas (menos de gap_seconds entre una y otra,
+    medido con la hora real del GPS), se reporta como una sola pasada con su
+    hora de entrada y de salida, en vez de listar cada lectura individual.
     received_at se conserva en cada pasada solo como referencia de cuándo
-    llegó ese dato al servidor."""
+    llegó ese dato al servidor. session_id queda fijado al de la primera
+    lectura del grupo (en la práctica una misma pasada no cruza de sesión,
+    porque el hueco que abre una sesión nueva -SESSION_GAP_SECONDS- es más
+    corto que el que separa dos pasadas -PASSAGE_GAP_SECONDS-); se usa para
+    que el frontend pueda ocultar la pasada cuando su recorrido/sesión se
+    desmarca en la tabla de recorridos."""
     passages = []
     current = None
     prev_dt = None
 
-    for lat, lon, gps_time, received_at, distance_m in rows:
+    for lat, lon, gps_time, received_at, session_id, distance_m in rows:
         try:
             gps_dt = datetime.strptime(gps_time, "%Y-%m-%d %H:%M:%S")
         except ValueError:
@@ -447,6 +452,7 @@ def group_passages(rows, gap_seconds: int = PASSAGE_GAP_SECONDS):
                 "end_gps_time": gps_time,
                 "start_received_at": received_at,
                 "end_received_at": received_at,
+                "session_id": session_id,
                 "lat": lat,
                 "lon": lon,
                 "points_count": 1,

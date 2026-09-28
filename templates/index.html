@@ -19,6 +19,7 @@
     --live: #2ecc71;
     --history: #f4a261;
     --history-soft: rgba(244, 162, 97, 0.14);
+    --topbar-h: 78px;
   }
 
   * { box-sizing: border-box; }
@@ -36,17 +37,35 @@
     background: var(--card);
     border-bottom: 1px solid var(--border);
     box-shadow: 0 4px 14px rgba(0,0,0,.4);
+    position: relative;
+    z-index: 20;
   }
   .topbar-inner {
     width: 94%;
-    max-width: 1100px;
+    max-width: 1300px;
     margin: 0 auto;
     padding: 14px 0;
     display: flex;
     align-items: center;
     flex-wrap: wrap;
-    gap: 16px;
+    gap: 14px;
+    min-height: 50px;
   }
+
+  .hamburger-btn {
+    width: 44px; height: 44px;
+    flex-shrink: 0;
+    display: grid; place-items: center;
+    border-radius: 10px;
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--accent);
+    cursor: pointer;
+    transition: background .15s;
+  }
+  .hamburger-btn:hover { background: var(--accent-soft); }
+  .hamburger-btn svg { width: 22px; height: 22px; }
+
   .logo {
     width: 48px; height: 48px;
     flex-shrink: 0;
@@ -57,7 +76,7 @@
     color: var(--accent);
   }
   .logo svg { width: 28px; height: 28px; }
-  .titles { flex: 1; min-width: 200px; }
+  .titles { flex: 1; min-width: 160px; }
   h1 { font-size: 22px; color: var(--accent); margin: 0; letter-spacing: .3px; }
   .role {
     display: inline-block;
@@ -85,7 +104,59 @@
   }
   .dot.live { background: var(--live); box-shadow: 0 0 0 3px rgba(46, 204, 113, 0.2); }
 
-  /* ---------- Contenido ---------- */
+  /* ---------- Menú desplegable (hamburguesa): Opciones / En Vivo / Históricos ---------- */
+  .nav-overlay {
+    display: none;
+    position: fixed;
+    top: var(--topbar-h); left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,.35);
+    z-index: 15;
+  }
+  .nav-overlay.open { display: block; }
+
+  .nav-drawer {
+    position: fixed;
+    top: var(--topbar-h); bottom: 0; left: -260px;
+    width: 240px;
+    background: var(--card);
+    border-right: 1px solid var(--border);
+    box-shadow: 4px 0 18px rgba(0,0,0,.45);
+    z-index: 16;
+    padding: 18px 16px;
+    transition: left .22s ease;
+  }
+  .nav-drawer.open { left: 0; }
+  .nav-drawer-title {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: var(--muted);
+    font-weight: bold;
+    margin-bottom: 14px;
+  }
+  .nav-drawer-btn {
+    display: block;
+    width: 100%;
+    text-align: left;
+    background: transparent;
+    color: #ffffff;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    font-size: 14px;
+    font-weight: bold;
+    cursor: pointer;
+    margin-bottom: 10px;
+    transition: background .15s, border-color .15s;
+  }
+  .nav-drawer-btn:hover { background: var(--accent-soft); }
+  .nav-drawer-btn.active {
+    background: var(--accent);
+    color: var(--bg);
+    border-color: var(--accent);
+  }
+
+  /* ---------- Contenido general ---------- */
   .wrap { width: 94%; max-width: 1100px; margin: 22px auto 0; }
 
   .panel {
@@ -159,6 +230,7 @@
   .btn.primary:hover { background: #a4d6ec; }
   .btn.history { background: var(--history-soft); color: var(--history); border-color: var(--history); }
   .btn.history:hover { background: rgba(244, 162, 97, 0.22); }
+  .btn.block { width: 100%; }
 
   #historyBanner {
     display: none;
@@ -176,7 +248,7 @@
     background: var(--history-soft);
     border: 1px solid var(--history);
     color: #ffffff;
-    padding: 10px 20px;
+    padding: 10px 14px;
     border-radius: 10px;
     font-size: 13px;
     margin-bottom: 14px;
@@ -212,34 +284,34 @@
   }
   .modal-card .btn { width: 100%; }
 
-  /* ---------- Tabla de recorridos (colapsable) ---------- */
+  /* ---------- Tabla de recorridos ---------- */
   #routesTablePanel {
     display: none;
-    background: var(--card);
+    background: var(--bg);
     border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 10px 18px;
-    margin-bottom: 14px;
-    max-height: 320px;
+    border-radius: 10px;
+    padding: 8px 12px;
+    margin-top: 12px;
+    max-height: 280px;
     overflow-y: auto;
   }
   #routesTablePanel.open { display: block; }
   table.routes-table {
     width: 100%;
     border-collapse: collapse;
-    font-size: 13px;
+    font-size: 12.5px;
   }
   table.routes-table th {
     text-align: left;
-    padding: 8px 10px;
+    padding: 7px 8px;
     color: var(--muted);
-    font-size: 11px;
+    font-size: 10.5px;
     text-transform: uppercase;
     letter-spacing: .5px;
     border-bottom: 1px solid var(--border);
   }
   table.routes-table td {
-    padding: 8px 10px;
+    padding: 7px 8px;
     border-bottom: 1px solid var(--border);
   }
   table.routes-table tr:last-child td { border-bottom: none; }
@@ -274,7 +346,8 @@
 
   #map {
     width: 100%;
-    height: 560px;
+    height: 100%;
+    min-height: 560px;
     border-radius: 14px;
     border: 1px solid var(--border);
     box-shadow: 0 4px 14px rgba(0,0,0,.4);
@@ -292,24 +365,27 @@
   }
   .truck-pin svg { width: 22px; height: 22px; }
 
-  /* Tarjeta "Posición Actual" */
-  .stats-card {
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    box-shadow: 0 4px 14px rgba(0,0,0,.4);
-    padding: 16px 22px;
-    margin-top: 18px;
+  /* ---------- Vista "En Vivo": panel fusionado (control + posición actual) ---------- */
+  .live-panel-header {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 16px;
+    padding-bottom: 16px;
+    margin-bottom: 16px;
+    border-bottom: 1px solid var(--border);
+    width: 100%;
   }
-  .stats-card-title {
-    font-size: 13px;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-    color: var(--accent);
+  .live-badge {
+    background: var(--accent);
+    color: var(--bg);
+    font-size: 15px;
     font-weight: bold;
-    margin-bottom: 14px;
+    padding: 8px 18px;
+    border-radius: 999px;
+    letter-spacing: .3px;
   }
-  .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+  .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; width: 100%; }
   .label {
     display: block;
     margin-bottom: 6px;
@@ -321,9 +397,86 @@
   }
   .value { font-family: "Courier New", monospace; font-size: 20px; }
 
+  /* ---------- Vista "Históricos": layout de dos columnas ---------- */
+  .history-layout {
+    width: 94%;
+    max-width: 1300px;
+    margin: 22px auto 0;
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+  }
+  .history-sidebar {
+    flex: 0 0 26%;
+    max-width: 340px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    box-shadow: 0 4px 14px rgba(0,0,0,.4);
+    padding: 18px 20px;
+  }
+  .history-sidebar.collapsed { display: none; }
+  .history-sidebar-title {
+    font-size: 15px;
+    font-weight: bold;
+    color: var(--accent);
+    margin-bottom: 4px;
+  }
+  .history-sidebar h4 {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--muted);
+    margin: 18px 0 10px;
+  }
+  .sidebar-dates { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; }
+  .sidebar-dates .date-field { justify-content: space-between; }
+  .sidebar-dates input[type="datetime-local"] { flex: 1; }
+  .sidebar-actions { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+  .sidebar-actions-row { display: flex; gap: 8px; }
+  .sidebar-actions-row .btn { flex: 1; }
+
+  .history-map-area {
+    flex: 1;
+    min-width: 0;
+    position: relative;
+  }
+  .expand-sidebar-btn {
+    display: none;
+    position: absolute;
+    top: 10px; left: 10px;
+    z-index: 5;
+    background: var(--card);
+    color: var(--accent);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 12px;
+    font-size: 13px;
+    font-weight: bold;
+    cursor: pointer;
+    box-shadow: 0 4px 14px rgba(0,0,0,.4);
+  }
+  .expand-sidebar-btn.visible { display: inline-block; }
+  .collapse-sidebar-btn {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    border-radius: 8px;
+    padding: 4px 10px;
+    font-size: 12px;
+    cursor: pointer;
+    float: right;
+  }
+  .collapse-sidebar-btn:hover { color: var(--accent); border-color: var(--accent); }
+
+  @media (max-width: 900px) {
+    .history-layout { flex-direction: column; }
+    .history-sidebar { flex-basis: auto; max-width: none; width: 100%; }
+  }
+
   @media (max-width: 760px) {
     .stats-grid { grid-template-columns: repeat(2, 1fr); }
-    #map { height: 420px; }
+    #map { min-height: 420px; }
     .divider { display: none; }
   }
 </style>
@@ -332,6 +485,13 @@
 
 <header class="topbar">
   <div class="topbar-inner">
+    <button class="hamburger-btn" id="hamburgerBtn" aria-label="Abrir menú">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+        <line x1="3" y1="6" x2="21" y2="6"/>
+        <line x1="3" y1="12" x2="21" y2="12"/>
+        <line x1="3" y1="18" x2="21" y2="18"/>
+      </svg>
+    </button>
     <div class="logo" id="logoIcon">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
         <path d="M1 6h13v10H1z"/>
@@ -348,68 +508,26 @@
   </div>
 </header>
 
-<main class="wrap">
+<div class="nav-overlay" id="navOverlay"></div>
+<nav class="nav-drawer" id="navDrawer">
+  <div class="nav-drawer-title">Opciones</div>
+  <button class="nav-drawer-btn active" id="navBtnLive" data-view="live">En Vivo</button>
+  <button class="nav-drawer-btn" id="navBtnHistory" data-view="history">Históricos</button>
+</nav>
+
+<!-- ===================== VISTA: EN VIVO ===================== -->
+<main class="wrap" id="liveView">
 
   <section class="panel">
-    <div class="group">
-      <span class="group-title">En vivo</span>
-      <div class="group-body">
-        <label class="switch">
-          <input type="checkbox" id="followToggle" checked>
-          <span class="slider"></span>
-          Seguir camión
-        </label>
-        <button class="btn" id="clearTrail">Limpiar recorrido</button>
-      </div>
+    <div class="live-panel-header">
+      <span class="live-badge">En Vivo</span>
+      <label class="switch">
+        <input type="checkbox" id="followToggle" checked>
+        <span class="slider"></span>
+        Seguir camión
+      </label>
+      <button class="btn" id="clearTrail">Limpiar recorrido</button>
     </div>
-
-    <div class="divider"></div>
-
-    <div class="group grow">
-      <span class="group-title">Recorrido histórico</span>
-      <div class="group-body">
-        <label class="date-field">Desde <input type="datetime-local" id="historyStart"></label>
-        <label class="date-field">Hasta <input type="datetime-local" id="historyEnd"></label>
-        <button class="btn primary" id="filterRoutesByDate">Filtrar por fecha</button>
-        <button class="btn history" id="clearDateFilter" style="display:none;">Quitar filtro</button>
-        <button class="btn" id="toggleRoutesTable">Ver tabla de recorridos</button>
-        <button class="btn history" id="backToLive" style="display:none;">Limpiar y volver a en vivo</button>
-      </div>
-    </div>
-  </section>
-
-  <div id="routesTablePanel">
-    <table class="routes-table">
-      <thead>
-        <tr><th></th><th>Recorrido</th><th>Puntos</th></tr>
-      </thead>
-      <tbody id="routesTableBody">
-        <tr class="todos-row">
-          <td><input type="checkbox" id="routesTodosCheckbox"></td>
-          <td colspan="2">Todos</td>
-        </tr>
-      </tbody>
-    </table>
-  </div>
-
-  <section class="panel">
-    <div class="group grow">
-      <span class="group-title">Buscar por lugar</span>
-      <div class="group-body">
-        <button class="btn" id="pickLocationBtn">Seleccionar punto en el mapa</button>
-        <button class="btn primary" id="searchPassages">Buscar pasadas</button>
-        <button class="btn history" id="clearPassages" style="display:none;">Limpiar búsqueda</button>
-      </div>
-    </div>
-  </section>
-
-  <div id="historyBanner"></div>
-  <div id="passagesBanner"></div>
-
-  <div id="map"></div>
-
-  <section class="stats-card">
-    <div class="stats-card-title">Posición Actual</div>
     <div class="stats-grid">
       <div><span class="label">Latitud</span><span class="value" id="lat">--</span></div>
       <div><span class="label">Longitud</span><span class="value" id="lon">--</span></div>
@@ -418,7 +536,63 @@
     </div>
   </section>
 
+  <div id="mapWrapLive" style="height:560px;">
+    <!-- el div #map real se mueve aquí cuando la vista está en "live" -->
+  </div>
+
 </main>
+
+<!-- ===================== VISTA: HISTÓRICOS ===================== -->
+<div class="history-layout" id="historyView" style="display:none;">
+
+  <aside class="history-sidebar" id="historySidebar">
+    <button class="collapse-sidebar-btn" id="collapseSidebarBtn" title="Ocultar filtros">«</button>
+    <div class="history-sidebar-title">Recorrido histórico</div>
+
+    <div class="sidebar-dates">
+      <label class="date-field">Desde <input type="datetime-local" id="historyStart"></label>
+      <label class="date-field">Hasta <input type="datetime-local" id="historyEnd"></label>
+    </div>
+
+    <div class="sidebar-actions">
+      <div class="sidebar-actions-row">
+        <button class="btn primary" id="filterRoutesByDate">Filtrar por fecha</button>
+        <button class="btn history" id="clearDateFilter">Limpiar búsqueda</button>
+      </div>
+    </div>
+
+    <div id="historyBanner"></div>
+    <div id="routesTablePanel">
+      <table class="routes-table">
+        <thead>
+          <tr><th></th><th>Recorrido</th><th>Puntos</th></tr>
+        </thead>
+        <tbody id="routesTableBody">
+          <tr class="todos-row">
+            <td><input type="checkbox" id="routesTodosCheckbox"></td>
+            <td colspan="2">Todos</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h4>Buscar por lugar</h4>
+    <div class="sidebar-actions">
+      <button class="btn block" id="pickLocationBtn">Seleccionar punto en el mapa</button>
+      <button class="btn primary block" id="searchPassages">Buscar pasadas</button>
+      <button class="btn history block" id="clearPassages" style="display:none;">Limpiar búsqueda</button>
+    </div>
+    <div id="passagesBanner"></div>
+  </aside>
+
+  <div class="history-map-area">
+    <button class="expand-sidebar-btn" id="expandSidebarBtn">☰ Mostrar filtros</button>
+    <div id="mapWrapHistory" style="height:calc(100vh - 160px); min-height:560px;">
+      <!-- el div #map real se mueve aquí cuando la vista está en "history" -->
+    </div>
+  </div>
+
+</div>
 
 <div class="modal-overlay" id="appModal">
   <div class="modal-card">
@@ -429,7 +603,14 @@
 
 <script>
 
-  const map = L.map("map").setView([4.6, -74.08], 13);
+  // ======================================================================
+  // MAPA (única instancia, se reubica entre la vista "en vivo" y "históricos")
+  // ======================================================================
+  const mapEl = document.createElement("div");
+  mapEl.id = "map";
+  document.getElementById("mapWrapLive").appendChild(mapEl);
+
+  const map = L.map(mapEl).setView([4.6, -74.08], 13);
 
   L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
     maxZoom: 19,
@@ -449,13 +630,81 @@
   const trail = L.polyline([], { color: "#2ecc71", weight: 4, opacity: 0.85 }).addTo(map);
 
   // Recorridos históricos (uno por cada sesión/recorrido ya guardado).
-  // Cada uno se dibuja con su propio color, y se puede mostrar u ocultar
-  // desde la tabla de recorridos sin perder los datos ya cargados.
   const ROUTE_COLORS = ["#c2410c", "#2ecc71", "#8ecae6", "#e63946", "#ffb703", "#9b5de5", "#00b4d8", "#f4a261"];
   const routesLayer = L.layerGroup().addTo(map);
-  const routesBySession = new Map(); // session_id -> { color, points, polyline, startMarker, endMarker, visible }
+  const routesBySession = new Map(); // session_id -> { color, points, polyline, startMarker, endMarker, visible, loaded, loading }
 
-  // --- Modal de validación (reemplaza los alert() nativos) ---
+  // ======================================================================
+  // NAVEGACIÓN: menú hamburguesa + cambio de vista En Vivo / Históricos
+  // ======================================================================
+  const hamburgerBtn = document.getElementById("hamburgerBtn");
+  const navDrawer = document.getElementById("navDrawer");
+  const navOverlay = document.getElementById("navOverlay");
+  const liveView = document.getElementById("liveView");
+  const historyView = document.getElementById("historyView");
+  const navBtnLive = document.getElementById("navBtnLive");
+  const navBtnHistory = document.getElementById("navBtnHistory");
+
+  function openNav() {
+    navDrawer.classList.add("open");
+    navOverlay.classList.add("open");
+  }
+  function closeNav() {
+    navDrawer.classList.remove("open");
+    navOverlay.classList.remove("open");
+  }
+  hamburgerBtn.addEventListener("click", () => {
+    navDrawer.classList.contains("open") ? closeNav() : openNav();
+  });
+  navOverlay.addEventListener("click", closeNav);
+
+  let currentView = "live";
+
+  function setView(view) {
+    currentView = view;
+    closeNav();
+
+    if (view === "live") {
+      liveView.style.display = "block";
+      historyView.style.display = "none";
+      navBtnLive.classList.add("active");
+      navBtnHistory.classList.remove("active");
+      document.getElementById("mapWrapLive").appendChild(mapEl);
+    } else {
+      liveView.style.display = "none";
+      historyView.style.display = "flex";
+      navBtnLive.classList.remove("active");
+      navBtnHistory.classList.add("active");
+      document.getElementById("mapWrapHistory").appendChild(mapEl);
+    }
+
+    // Leaflet necesita que se le avise tras cambiar el tamaño/contenedor real
+    // de su div, o el mapa queda mal recortado hasta que el usuario interactúe.
+    setTimeout(() => map.invalidateSize(), 60);
+  }
+
+  navBtnLive.addEventListener("click", () => setView("live"));
+  navBtnHistory.addEventListener("click", () => setView("history"));
+
+  // ---- Barra lateral de Históricos: colapsar / expandir ----
+  const historySidebar = document.getElementById("historySidebar");
+  const collapseSidebarBtn = document.getElementById("collapseSidebarBtn");
+  const expandSidebarBtn = document.getElementById("expandSidebarBtn");
+
+  collapseSidebarBtn.addEventListener("click", () => {
+    historySidebar.classList.add("collapsed");
+    expandSidebarBtn.classList.add("visible");
+    setTimeout(() => map.invalidateSize(), 60);
+  });
+  expandSidebarBtn.addEventListener("click", () => {
+    historySidebar.classList.remove("collapsed");
+    expandSidebarBtn.classList.remove("visible");
+    setTimeout(() => map.invalidateSize(), 60);
+  });
+
+  // ======================================================================
+  // Modal de validación (reemplaza los alert() nativos)
+  // ======================================================================
   const appModal = document.getElementById("appModal");
   const modalMessage = document.getElementById("modalMessage");
   document.getElementById("modalOk").addEventListener("click", () => appModal.classList.remove("open"));
@@ -503,29 +752,40 @@
     route.endMarker = null;
   }
 
+  // El zoom/encuadre del mapa SOLO se recalcula cuando una ruta se agrega a
+  // la vista (para que el usuario la vea completa la primera vez). Al
+  // desmarcar una ruta nunca se llama esta función, así se respeta el zoom
+  // que el usuario tenía puesto.
+  function fitToVisibleRoutes() {
+    const visiblePolylines = [...routesBySession.values()]
+      .filter((r) => r.visible && r.polyline)
+      .map((r) => r.polyline);
+    if (visiblePolylines.length > 0) {
+      map.fitBounds(L.featureGroup(visiblePolylines).getBounds(), { maxZoom: 15, padding: [20, 20] });
+    }
+  }
+
   function setRouteVisible(sessionId, desiredVisible) {
     const route = routesBySession.get(sessionId);
     if (!route) return;
 
-    // route.visible siempre refleja lo que el usuario pidió por último,
-    // aunque los puntos todavía se estén trayendo del servidor.
     route.visible = desiredVisible;
 
     if (!desiredVisible) {
       undrawRoute(route);
       updateHistoryViewState();
+      renderPassageMarkers(); // oculta también las pasadas que pertenecían a esta ruta
       return;
     }
 
     if (route.loaded) {
       if (!route.polyline) drawRoute(route);
       updateHistoryViewState();
+      fitToVisibleRoutes();
+      renderPassageMarkers();
       return;
     }
 
-    // Los puntos de cada recorrido se piden recién cuando el usuario lo
-    // marca por primera vez (no al cargar la página), para no traer todo
-    // el histórico de una vez si nadie lo pidió.
     if (route.loading) return; // ya hay un fetch en curso; él decide al terminar
 
     route.loading = true;
@@ -535,8 +795,12 @@
         route.points = data.points || [];
         route.loaded = true;
         route.loading = false;
-        if (route.visible) drawRoute(route); // pudo haberse desmarcado mientras cargaba
+        if (route.visible) {
+          drawRoute(route);
+          fitToVisibleRoutes();
+        }
         updateHistoryViewState();
+        renderPassageMarkers();
       })
       .catch(() => { route.loading = false; });
   }
@@ -551,7 +815,6 @@
   function updateHistoryViewState() {
     const active = anyRouteVisible();
     viewingHistory = active;
-    document.getElementById("backToLive").style.display = active ? "inline-block" : "none";
 
     const banner = document.getElementById("historyBanner");
     if (routesBySession.size === 0 && currentFilterLabel) {
@@ -563,22 +826,7 @@
 
     if (active) {
       trail.setLatLngs([]); // oculta el trazo en vivo mientras se ven recorridos históricos
-      const visiblePolylines = [...routesBySession.values()]
-        .filter((r) => r.visible && r.polyline)
-        .map((r) => r.polyline);
-      if (visiblePolylines.length > 0) {
-        map.fitBounds(L.featureGroup(visiblePolylines).getBounds(), { maxZoom: 15, padding: [20, 20] });
-      }
     }
-  }
-
-  function backToLiveView() {
-    document.getElementById("routesTodosCheckbox").checked = false;
-    setAllRoutesVisible(false);
-
-    fetch("/api/history")
-      .then((r) => r.json())
-      .then((points) => trail.setLatLngs(points.map((p) => [p.lat, p.lon])));
   }
 
   let mapCentered = false;
@@ -655,8 +903,6 @@
   }
 
   // --- Calendario bloqueado: nunca se puede elegir una fecha/hora futura ---
-  // (aplica al filtro de fecha de la tabla de recorridos históricos;
-  // la búsqueda "por lugar" no usa fecha, ver más abajo)
 
   function localDatetimeString(date) {
     const offsetMs = date.getTimezoneOffset() * 60000;
@@ -695,19 +941,11 @@
     return true;
   }
 
-  document.getElementById("backToLive").addEventListener("click", backToLiveView);
-
   // --- Tabla de recorridos: un checkbox por recorrido guardado + "Todos" ---
 
   const todosCheckbox = document.getElementById("routesTodosCheckbox");
   const routesTableBody = document.getElementById("routesTableBody");
-  const toggleRoutesTableBtn = document.getElementById("toggleRoutesTable");
   const routesTablePanel = document.getElementById("routesTablePanel");
-
-  toggleRoutesTableBtn.addEventListener("click", () => {
-    const isOpen = routesTablePanel.classList.toggle("open");
-    toggleRoutesTableBtn.textContent = isOpen ? "Ocultar tabla de recorridos" : "Ver tabla de recorridos";
-  });
 
   function setAllRoutesVisible(visible) {
     routesTableBody.querySelectorAll("tr[data-session-id] input[type=checkbox]").forEach((cb) => {
@@ -734,13 +972,16 @@
     todosCheckbox.checked = false;
   }
 
-  // Al cargar la página (o al quitar el filtro) solo se puebla la tabla,
-  // sin dibujar nada en el mapa: se entra siempre en vivo. Solo cuando el
-  // usuario filtra por fecha (una búsqueda explícita) se muestran de una
-  // vez los recorridos encontrados.
+  // Al cargar la página (o al quitar el filtro) solo se puebla la tabla en
+  // memoria (routesBySession), sin mostrar el panel ni dibujar nada en el
+  // mapa: así "buscar por lugar" siempre puede saber a qué recorrido
+  // pertenece cada pasada, aunque el usuario no haya filtrado por fecha
+  // todavía. Solo cuando el usuario filtra explícitamente se muestra el
+  // panel con la tabla y se marcan los recorridos encontrados.
   function loadRoutesTable(start, end) {
     clearRoutesTable();
     const autoShow = Boolean(start && end);
+    routesTablePanel.classList.toggle("open", autoShow);
 
     let url = "/api/sessions";
     if (autoShow) {
@@ -789,6 +1030,8 @@
         if (autoShow) {
           sessions.forEach((s) => setRouteVisible(s.session_id, true));
         }
+
+        renderPassageMarkers(); // la tabla cambió: re-filtra qué pasadas siguen visibles
       })
       .catch(() => showAlert("Error cargando la tabla de recorridos"));
   }
@@ -804,16 +1047,14 @@
 
     currentFilterLabel = `${start.replace("T", " ")} → ${end.replace("T", " ")}`;
     loadRoutesTable(start, end);
-
-    document.getElementById("clearDateFilter").style.display = "inline-block";
-    routesTablePanel.classList.add("open");
-    toggleRoutesTableBtn.textContent = "Ocultar tabla de recorridos";
   });
 
+  // "Limpiar búsqueda": quita la tabla, borra los recorridos dibujados y
+  // resetea el intervalo de fechas — deja la sección de históricos como
+  // recién abierta.
   document.getElementById("clearDateFilter").addEventListener("click", () => {
     document.getElementById("historyStart").value = "";
     document.getElementById("historyEnd").value = "";
-    document.getElementById("clearDateFilter").style.display = "none";
     currentFilterLabel = null;
     loadRoutesTable();
   });
@@ -870,7 +1111,9 @@
     document.getElementById("status").textContent = "Connection lost — retrying…";
   };
 
-  // --- Búsqueda de "pasadas" por un lugar elegido en el mapa ---
+  // ======================================================================
+  // Búsqueda de "pasadas" por un lugar elegido en el mapa
+  // ======================================================================
 
   const PASSAGE_RADIUS_M = 100;
 
@@ -878,13 +1121,12 @@
   let placeMarker = null;
   let placeCircle = null;
   const passageMarkersLayer = L.layerGroup().addTo(map);
+  let lastPassages = []; // última respuesta de /api/passages, con su session_id
 
   document.getElementById("pickLocationBtn").addEventListener("click", () => {
     pickingLocation = true;
     document.getElementById("status").textContent = "Haz clic en el mapa para elegir el punto…";
   });
-
-
 
   map.on("click", (e) => {
     if (!pickingLocation) return;
@@ -900,6 +1142,26 @@
 
     document.getElementById("status").textContent = `Punto seleccionado: ${lat.toFixed(5)}, ${lng.toFixed(5)}`;
   });
+
+  // Vuelve a dibujar las pasadas ya encontradas, respetando qué recorridos
+  // están marcados/visibles en la tabla en este momento. Se llama cada vez
+  // que llegan pasadas nuevas Y cada vez que cambia una casilla de la
+  // tabla, así una pasada desaparece del mapa si se desmarca su recorrido.
+  function renderPassageMarkers() {
+    passageMarkersLayer.clearLayers();
+
+    lastPassages.forEach((p) => {
+      // Si la pasada no tiene sesión asociada, o esa sesión no está
+      // presente en la tabla actual (por ejemplo, todavía no se ha
+      // filtrado por fecha), se muestra igual por defecto.
+      const route = p.session_id ? routesBySession.get(p.session_id) : null;
+      if (route && !route.visible) return; // su recorrido está desmarcado: se oculta
+
+      L.circleMarker([p.lat, p.lon], { radius: 6, color: "#f4a261", fillOpacity: 0.9 })
+        .bindPopup(`${p.start_gps_time} — ${p.end_gps_time}`)
+        .addTo(passageMarkersLayer);
+    });
+  }
 
   document.getElementById("searchPassages").addEventListener("click", () => {
     if (!placeMarker) {
@@ -921,17 +1183,14 @@
           return;
         }
 
-        passageMarkersLayer.clearLayers();
+        lastPassages = data.passages;
+        renderPassageMarkers();
 
         if (data.passages.length === 0) {
           banner.style.display = "block";
           banner.innerHTML = "El camión no ha pasado por ese punto en el rango consultado.";
         } else {
           const items = data.passages.map((p) => {
-            L.circleMarker([p.lat, p.lon], { radius: 6, color: "#f4a261", fillOpacity: 0.9 })
-              .bindPopup(`${p.start_gps_time} — ${p.end_gps_time}`)
-              .addTo(passageMarkersLayer);
-
             return p.start_received_at === p.end_received_at
               ? `<li>${p.start_received_at} (${p.points_count} lectura${p.points_count > 1 ? "s" : ""})</li>`
               : `<li>${p.start_received_at} → ${p.end_received_at} (${p.points_count} lecturas)</li>`;
@@ -947,6 +1206,7 @@
   });
 
   document.getElementById("clearPassages").addEventListener("click", () => {
+    lastPassages = [];
     passageMarkersLayer.clearLayers();
     document.getElementById("passagesBanner").style.display = "none";
     document.getElementById("clearPassages").style.display = "none";

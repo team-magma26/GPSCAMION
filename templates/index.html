@@ -441,12 +441,24 @@
     min-width: 0;
     position: relative;
   }
+  .history-map-area {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: stretch;
+    gap: 8px;
+  }
+  .map-area-rail {
+    width: 0;
+    overflow: hidden;
+    flex-shrink: 0;
+    padding-top: 14px;
+    transition: width .15s ease;
+  }
+  .map-area-rail.visible { width: 42px; }
   .expand-sidebar-btn {
     display: none;
-    position: absolute;
-    top: 14px; left: 10px;
-    z-index: 800;
-    width: 34px; height: 34px;
+    width: 36px; height: 36px;
     align-items: center; justify-content: center;
     background: var(--card);
     color: var(--accent);
@@ -469,6 +481,8 @@
     float: right;
   }
   .collapse-sidebar-btn:hover { color: var(--accent); border-color: var(--accent); }
+
+  #mapWrapHistory { flex: 1; min-width: 0; }
 
   @media (max-width: 900px) {
     .history-layout { flex-direction: column; }
@@ -587,7 +601,9 @@
   </aside>
 
   <div class="history-map-area">
-    <button class="expand-sidebar-btn" id="expandSidebarBtn" title="Mostrar filtros">»</button>
+    <div class="map-area-rail" id="mapAreaRail">
+      <button class="expand-sidebar-btn" id="expandSidebarBtn" title="Mostrar filtros">»</button>
+    </div>
     <div id="mapWrapHistory" style="height:calc(100vh - 160px); min-height:560px;">
       <!-- el div #map real se mueve aquí cuando la vista está en "history" -->
     </div>
@@ -727,15 +743,18 @@
   const historySidebar = document.getElementById("historySidebar");
   const collapseSidebarBtn = document.getElementById("collapseSidebarBtn");
   const expandSidebarBtn = document.getElementById("expandSidebarBtn");
+  const mapAreaRail = document.getElementById("mapAreaRail");
 
   collapseSidebarBtn.addEventListener("click", () => {
     historySidebar.classList.add("collapsed");
     expandSidebarBtn.classList.add("visible");
+    mapAreaRail.classList.add("visible");
     setTimeout(() => map.invalidateSize(), 60);
   });
   expandSidebarBtn.addEventListener("click", () => {
     historySidebar.classList.remove("collapsed");
     expandSidebarBtn.classList.remove("visible");
+    mapAreaRail.classList.remove("visible");
     setTimeout(() => map.invalidateSize(), 60);
   });
 

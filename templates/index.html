@@ -591,7 +591,7 @@
       </table>
     </div>
 
-    <h4>Buscar por lugar</h4>
+    <div class="history-sidebar-title" style="margin-top:26px;">Buscar por lugar</div>
     <div class="sidebar-actions">
       <button class="btn block" id="pickLocationBtn">Seleccionar punto en el mapa</button>
       <button class="btn primary block" id="searchPassages">Buscar pasadas</button>
@@ -721,6 +721,7 @@
     if (placeCircle) { map.removeLayer(placeCircle); placeCircle = null; }
 
     viewingHistory = false;
+    historyFilterActive = false;
 
     fetch("/api/history")
       .then((r) => r.json())
@@ -1020,6 +1021,11 @@
   });
 
   let currentFilterLabel = null; // ej. "2026-09-20 08:00 → 2026-09-25 20:00", o null si no hay filtro
+  // Solo es true cuando el usuario ya aplicó un filtro de fecha (y por lo
+  // tanto la tabla de recorridos refleja una elección real de qué mostrar).
+  // Mientras sea false, "buscar por lugar" muestra TODAS las pasadas sin
+  // importar qué diga routesBySession, porque nada se ha filtrado todavía.
+  let historyFilterActive = false;
 
   function clearRoutesTable() {
     routesBySession.forEach((route) => undrawRoute(route));
@@ -1037,6 +1043,7 @@
   function loadRoutesTable(start, end) {
     clearRoutesTable();
     const autoShow = Boolean(start && end);
+    historyFilterActive = autoShow;
     routesTablePanel.classList.toggle("open", autoShow);
 
     let url = "/api/sessions";
@@ -1207,11 +1214,12 @@
     passageMarkersLayer.clearLayers();
 
     lastPassages.forEach((p) => {
-      // Si la pasada no tiene sesión asociada, o esa sesión no está
-      // presente en la tabla actual (por ejemplo, todavía no se ha
-      // filtrado por fecha), se muestra igual por defecto.
-      const route = p.session_id ? routesBySession.get(p.session_id) : null;
-      if (route && !route.visible) return; // su recorrido está desmarcado: se oculta
+      // El filtro por recorrido solo aplica si el usuario ya filtró por
+      // fecha; si no, no hay nada que "desmarcar" todavía y se muestra todo.
+      if (historyFilterActive) {
+        const route = p.session_id ? routesBySession.get(p.session_id) : null;
+        if (route && !route.visible) return; // su recorrido está desmarcado: se oculta
+      }
 
       L.circleMarker([p.lat, p.lon], { radius: 6, color: "#f4a261", fillOpacity: 0.9 })
         .bindPopup(`${p.start_gps_time} — ${p.end_gps_time}`)

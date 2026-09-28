@@ -324,6 +324,54 @@ def get_history_range(start_dt: str, end_dt: str, max_points: int = MAX_HISTORY_
     return rows, sql_text
 
 
+def get_sessions(limit: int = 50, start_dt: str = None, end_dt: str = None):
+    """Lista de recorridos (sesiones) ya registrados para ACCOUNT_ID, con el
+    rango de gps_time que cubre cada uno y cuántos puntos tiene, para que el
+    usuario los vea en la tabla de recorridos del frontend.
+    Si se pasan start_dt/end_dt (formato 'YYYY-MM-DD HH:MM:SS'), solo se
+    devuelven los recorridos cuyo rango de gps_time se solapa con esa
+    ventana (el recorrido tuvo al menos un punto dentro de ese período)."""
+    having_clause = ""
+    params = [ACCOUNT_ID]
+    if start_dt and end_dt:
+        having_clause = "HAVING MIN(gps_time) <= %s AND MAX(gps_time) >= %s"
+        params += [end_dt, start_dt]
+    params.append(limit)
+
+    query = (
+        "SELECT session_id, MIN(gps_time), MAX(gps_time), COUNT(*) "
+        "FROM locations WHERE account_id = %s AND session_id IS NOT NULL "
+        "GROUP BY session_id " + having_clause +
+        " ORDER BY MIN(gps_time) DESC LIMIT %s"
+    )
+
+    with db_lock:
+        conn = get_connection()
+        cur = conn.cursor()
+        cur.execute(query, params)
+        rows = cur.fetchall()
+        cur.close()
+        conn.close()
+    return rows
+
+
+def get_session_route(session_id: str, max_points: int = MAX_HISTORY_RANGE_POINTS):
+    """Puntos de un recorrido (sesión) específico ya registrado, ordenados
+    por gps_time, para dibujarlo en el mapa igual que get_history_range()."""
+    with db_lock:
+        conn = get_connection()
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT lat, lon, gps_time, received_at FROM locations "
+            "WHERE account_id = %s AND session_id = %s ORDER BY gps_time ASC LIMIT %s",
+            (ACCOUNT_ID, session_id, max_points),
+        )
+        rows = cur.fetchall()
+        cur.close()
+        conn.close()
+    return rows
+
+
 def get_passages_near(target_lat: float, target_lon: float, radius_m: float,
                        start_dt: str = None, end_dt: str = None,
                        max_points: int = MAX_HISTORY_RANGE_POINTS):
@@ -532,6 +580,10 @@ def api_history_range():
     start_norm = start.replace("T", " ") + ":00"
     end_norm = end.replace("T", " ") + ":59"
 
+    now_str = now_local().strftime("%Y-%m-%d %H:%M:%S")
+    if start_norm > now_str:
+        return jsonify({"error": "La fecha/hora 'desde' no puede ser futura"}), 400
+
     rows, sql_text = get_history_range(start_norm, end_norm)
     points = [
         {"lat": lat, "lon": lon, "time": gps_time, "received_at": received_at}
@@ -542,6 +594,54 @@ def api_history_range():
     if debug:
         response["sql"] = sql_text
     return jsonify(response)
+
+
+@app.route("/api/sessions")
+def api_sessions():
+    """Lista de recorridos (sesiones) ya registrados para ACCOUNT_ID, para
+    poblar la tabla de recorridos del frontend. Parámetros (query string):
+      limit = cantidad máxima de recorridos a devolver (opcional, default 50)
+      start, end = 'YYYY-MM-DDTHH:MM' (opcionales, ambos juntos) -> si se
+                   pasan, solo devuelve los recorridos cuyo rango de
+                   gps_time se solapa con esa ventana de fecha/hora.
+    """
+    limit = request.args.get("limit", default=50, type=int)
+    start = request.args.get("start")
+    end = request.args.get("end")
+
+    if (start and not end) or (end and not start):
+        return jsonify({"error": "Si filtras por fecha, se requieren 'start' y 'end'"}), 400
+
+    start_norm = (start.replace("T", " ") + ":00") if start else None
+    end_norm = (end.replace("T", " ") + ":59") if end else None
+
+    if start_norm and start_norm > now_local().strftime("%Y-%m-%d %H:%M:%S"):
+        return jsonify({"error": "La fecha/hora 'desde' no puede ser futura"}), 400
+
+    rows = get_sessions(limit, start_norm, end_norm)
+    sessions = [
+        {"session_id": sid, "start_time": start, "end_time": end, "points": points}
+        for sid, start, end, points in rows
+    ]
+    return jsonify({"sessions": sessions})
+
+
+@app.route("/api/session_route")
+def api_session_route():
+    """Puntos de un recorrido (sesión) específico ya registrado, para
+    dibujarlo en el mapa. Parámetros (query string):
+      session_id = identificador del recorrido (obligatorio, viene de /api/sessions)
+    """
+    session_id = request.args.get("session_id")
+    if not session_id:
+        return jsonify({"error": "Se requiere el parámetro 'session_id'"}), 400
+
+    rows = get_session_route(session_id)
+    points = [
+        {"lat": lat, "lon": lon, "time": gps_time, "received_at": received_at}
+        for lat, lon, gps_time, received_at in rows
+    ]
+    return jsonify({"points": points, "count": len(points)})
 
 
 @app.route("/api/passages")
@@ -571,6 +671,9 @@ def api_passages():
     end = request.args.get("end")
     start_norm = (start.replace("T", " ") + ":00") if start else None
     end_norm = (end.replace("T", " ") + ":59") if end else None
+
+    if start_norm and start_norm > now_local().strftime("%Y-%m-%d %H:%M:%S"):
+        return jsonify({"error": "La fecha/hora 'desde' no puede ser futura"}), 400
 
     debug = request.args.get("debug") == "1"
 

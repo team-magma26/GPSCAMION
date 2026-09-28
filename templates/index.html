@@ -385,7 +385,7 @@
       </thead>
       <tbody id="routesTableBody">
         <tr class="todos-row">
-          <td><input type="checkbox" id="routesTodosCheckbox" checked></td>
+          <td><input type="checkbox" id="routesTodosCheckbox"></td>
           <td colspan="2">Todos</td>
         </tr>
       </tbody>
@@ -503,16 +503,42 @@
     route.endMarker = null;
   }
 
-  function setRouteVisible(sessionId, visible) {
+  function setRouteVisible(sessionId, desiredVisible) {
     const route = routesBySession.get(sessionId);
-    if (!route || route.visible === visible) return;
-    route.visible = visible;
-    if (visible) {
-      drawRoute(route);
-    } else {
+    if (!route) return;
+
+    // route.visible siempre refleja lo que el usuario pidió por último,
+    // aunque los puntos todavía se estén trayendo del servidor.
+    route.visible = desiredVisible;
+
+    if (!desiredVisible) {
       undrawRoute(route);
+      updateHistoryViewState();
+      return;
     }
-    updateHistoryViewState();
+
+    if (route.loaded) {
+      if (!route.polyline) drawRoute(route);
+      updateHistoryViewState();
+      return;
+    }
+
+    // Los puntos de cada recorrido se piden recién cuando el usuario lo
+    // marca por primera vez (no al cargar la página), para no traer todo
+    // el histórico de una vez si nadie lo pidió.
+    if (route.loading) return; // ya hay un fetch en curso; él decide al terminar
+
+    route.loading = true;
+    fetch(`/api/session_route?session_id=${encodeURIComponent(sessionId)}`)
+      .then((r) => r.json())
+      .then((data) => {
+        route.points = data.points || [];
+        route.loaded = true;
+        route.loading = false;
+        if (route.visible) drawRoute(route); // pudo haberse desmarcado mientras cargaba
+        updateHistoryViewState();
+      })
+      .catch(() => { route.loading = false; });
   }
 
   function anyRouteVisible() {
@@ -528,12 +554,7 @@
     document.getElementById("backToLive").style.display = active ? "inline-block" : "none";
 
     const banner = document.getElementById("historyBanner");
-    const visibleCount = [...routesBySession.values()].filter((r) => r.visible).length;
-    const filterSuffix = currentFilterLabel ? ` — filtro: ${currentFilterLabel}` : "";
-    if (routesBySession.size > 0) {
-      banner.style.display = "block";
-      banner.textContent = `Mostrando ${visibleCount} de ${routesBySession.size} recorrido(s) guardado(s)${filterSuffix}`;
-    } else if (currentFilterLabel) {
+    if (routesBySession.size === 0 && currentFilterLabel) {
       banner.style.display = "block";
       banner.textContent = `No hay recorridos guardados entre ${currentFilterLabel}`;
     } else {
@@ -710,14 +731,19 @@
     routesBySession.forEach((route) => undrawRoute(route));
     routesBySession.clear();
     routesTableBody.querySelectorAll("tr[data-session-id]").forEach((tr) => tr.remove());
-    todosCheckbox.checked = true;
+    todosCheckbox.checked = false;
   }
 
+  // Al cargar la página (o al quitar el filtro) solo se puebla la tabla,
+  // sin dibujar nada en el mapa: se entra siempre en vivo. Solo cuando el
+  // usuario filtra por fecha (una búsqueda explícita) se muestran de una
+  // vez los recorridos encontrados.
   function loadRoutesTable(start, end) {
     clearRoutesTable();
+    const autoShow = Boolean(start && end);
 
     let url = "/api/sessions";
-    if (start && end) {
+    if (autoShow) {
       url += `?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`;
     }
 
@@ -738,12 +764,14 @@
             startMarker: null,
             endMarker: null,
             visible: false,
+            loaded: false,
+            loading: false,
           });
 
           const row = document.createElement("tr");
           row.dataset.sessionId = s.session_id;
           row.innerHTML = `
-            <td><input type="checkbox" checked></td>
+            <td><input type="checkbox"${autoShow ? " checked" : ""}></td>
             <td><span class="route-swatch" style="background:${ROUTE_COLORS[i % ROUTE_COLORS.length]}"></span>${s.start_time} → ${s.end_time}</td>
             <td>${s.points}</td>
           `;
@@ -755,20 +783,12 @@
           routesTableBody.appendChild(row);
         });
 
+        todosCheckbox.checked = autoShow && sessions.length > 0;
         updateHistoryViewState(); // refleja de una vez el caso "0 recorridos" del filtro
 
-        // Trae los puntos de todos los recorridos y, como "Todos" empieza
-        // marcado, los deja visibles en el mapa desde que carga la página.
-        return Promise.all(sessions.map((s) =>
-          fetch(`/api/session_route?session_id=${encodeURIComponent(s.session_id)}`)
-            .then((r) => r.json())
-            .then((routeData) => {
-              const route = routesBySession.get(s.session_id);
-              route.points = routeData.points || [];
-              setRouteVisible(s.session_id, true);
-            })
-            .catch(() => {})
-        ));
+        if (autoShow) {
+          sessions.forEach((s) => setRouteVisible(s.session_id, true));
+        }
       })
       .catch(() => showAlert("Error cargando la tabla de recorridos"));
   }

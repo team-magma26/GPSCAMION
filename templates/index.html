@@ -368,7 +368,11 @@
     <div class="group grow">
       <span class="group-title">Recorrido histórico</span>
       <div class="group-body">
-        <button class="btn primary" id="toggleRoutesTable">Ver tabla de recorridos</button>
+        <label class="date-field">Desde <input type="datetime-local" id="historyStart"></label>
+        <label class="date-field">Hasta <input type="datetime-local" id="historyEnd"></label>
+        <button class="btn primary" id="filterRoutesByDate">Filtrar por fecha</button>
+        <button class="btn history" id="clearDateFilter" style="display:none;">Quitar filtro</button>
+        <button class="btn" id="toggleRoutesTable">Ver tabla de recorridos</button>
         <button class="btn history" id="backToLive" style="display:none;">Limpiar y volver a en vivo</button>
       </div>
     </div>
@@ -393,8 +397,6 @@
       <span class="group-title">Buscar por lugar</span>
       <div class="group-body">
         <button class="btn" id="pickLocationBtn">Seleccionar punto en el mapa</button>
-        <label class="date-field">Desde <input type="datetime-local" id="passageStart"></label>
-        <label class="date-field">Hasta <input type="datetime-local" id="passageEnd"></label>
         <button class="btn primary" id="searchPassages">Buscar pasadas</button>
         <button class="btn history" id="clearPassages" style="display:none;">Limpiar búsqueda</button>
       </div>
@@ -527,9 +529,13 @@
 
     const banner = document.getElementById("historyBanner");
     const visibleCount = [...routesBySession.values()].filter((r) => r.visible).length;
+    const filterSuffix = currentFilterLabel ? ` — filtro: ${currentFilterLabel}` : "";
     if (routesBySession.size > 0) {
       banner.style.display = "block";
-      banner.textContent = `Mostrando ${visibleCount} de ${routesBySession.size} recorrido(s) guardado(s)`;
+      banner.textContent = `Mostrando ${visibleCount} de ${routesBySession.size} recorrido(s) guardado(s)${filterSuffix}`;
+    } else if (currentFilterLabel) {
+      banner.style.display = "block";
+      banner.textContent = `No hay recorridos guardados entre ${currentFilterLabel}`;
     } else {
       banner.style.display = "none";
     }
@@ -628,7 +634,8 @@
   }
 
   // --- Calendario bloqueado: nunca se puede elegir una fecha/hora futura ---
-  // (aplica a los campos de fecha del buscador "por lugar")
+  // (aplica al filtro de fecha de la tabla de recorridos históricos;
+  // la búsqueda "por lugar" no usa fecha, ver más abajo)
 
   function localDatetimeString(date) {
     const offsetMs = date.getTimezoneOffset() * 60000;
@@ -637,8 +644,8 @@
 
   function updateDateLimits() {
     const nowStr = localDatetimeString(new Date());
-    document.getElementById("passageStart").max = nowStr;
-    document.getElementById("passageEnd").max = nowStr;
+    document.getElementById("historyStart").max = nowStr;
+    document.getElementById("historyEnd").max = nowStr;
   }
   updateDateLimits();
   setInterval(updateDateLimits, 30000);
@@ -697,10 +704,30 @@
     setAllRoutesVisible(todosCheckbox.checked);
   });
 
-  function loadRoutesTable() {
-    fetch("/api/sessions")
+  let currentFilterLabel = null; // ej. "2026-09-20 08:00 → 2026-09-25 20:00", o null si no hay filtro
+
+  function clearRoutesTable() {
+    routesBySession.forEach((route) => undrawRoute(route));
+    routesBySession.clear();
+    routesTableBody.querySelectorAll("tr[data-session-id]").forEach((tr) => tr.remove());
+    todosCheckbox.checked = true;
+  }
+
+  function loadRoutesTable(start, end) {
+    clearRoutesTable();
+
+    let url = "/api/sessions";
+    if (start && end) {
+      url += `?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`;
+    }
+
+    fetch(url)
       .then((r) => r.json())
       .then((data) => {
+        if (data.error) {
+          showAlert(data.error);
+          return;
+        }
         const sessions = data.sessions || [];
 
         sessions.forEach((s, i) => {
@@ -728,6 +755,8 @@
           routesTableBody.appendChild(row);
         });
 
+        updateHistoryViewState(); // refleja de una vez el caso "0 recorridos" del filtro
+
         // Trae los puntos de todos los recorridos y, como "Todos" empieza
         // marcado, los deja visibles en el mapa desde que carga la página.
         return Promise.all(sessions.map((s) =>
@@ -744,6 +773,30 @@
       .catch(() => showAlert("Error cargando la tabla de recorridos"));
   }
   loadRoutesTable();
+
+  // --- Filtro por fecha de la tabla de recorridos históricos ---
+
+  document.getElementById("filterRoutesByDate").addEventListener("click", () => {
+    const start = document.getElementById("historyStart").value;
+    const end = document.getElementById("historyEnd").value;
+
+    if (!validateRange(start, end)) return;
+
+    currentFilterLabel = `${start.replace("T", " ")} → ${end.replace("T", " ")}`;
+    loadRoutesTable(start, end);
+
+    document.getElementById("clearDateFilter").style.display = "inline-block";
+    routesTablePanel.classList.add("open");
+    toggleRoutesTableBtn.textContent = "Ocultar tabla de recorridos";
+  });
+
+  document.getElementById("clearDateFilter").addEventListener("click", () => {
+    document.getElementById("historyStart").value = "";
+    document.getElementById("historyEnd").value = "";
+    document.getElementById("clearDateFilter").style.display = "none";
+    currentFilterLabel = null;
+    loadRoutesTable();
+  });
 
   // 1) Cargar el historial para dibujar el recorrido ya hecho antes de conectarnos en vivo.
   fetch("/api/history")
@@ -835,20 +888,10 @@
     }
 
     const { lat, lng } = placeMarker.getLatLng();
-    const start = document.getElementById("passageStart").value;
-    const end = document.getElementById("passageEnd").value;
     const banner = document.getElementById("passagesBanner");
 
-    if ((start && !end) || (!start && end)) {
-      showAlert("Si vas a acotar por fecha, selecciona tanto 'Desde' como 'Hasta'.");
-      return;
-    }
-    if (start && end && !validateRange(start, end)) return;
-
-    let url = `/api/passages?lat=${lat}&lon=${lng}&radius=${PASSAGE_RADIUS_M}`;
-    if (start && end) {
-      url += `&start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`;
-    }
+    // Búsqueda por lugar: siempre sobre todo el histórico, sin filtro de fecha.
+    const url = `/api/passages?lat=${lat}&lon=${lng}&radius=${PASSAGE_RADIUS_M}`;
 
     fetch(url)
       .then((r) => r.json())

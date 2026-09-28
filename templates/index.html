@@ -110,7 +110,7 @@
     position: fixed;
     top: var(--topbar-h); left: 0; right: 0; bottom: 0;
     background: rgba(0,0,0,.35);
-    z-index: 15;
+    z-index: 3000;
   }
   .nav-overlay.open { display: block; }
 
@@ -121,7 +121,7 @@
     background: var(--card);
     border-right: 1px solid var(--border);
     box-shadow: 4px 0 18px rgba(0,0,0,.45);
-    z-index: 16;
+    z-index: 3001;
     padding: 18px 16px;
     transition: left .22s ease;
   }
@@ -444,19 +444,20 @@
   .expand-sidebar-btn {
     display: none;
     position: absolute;
-    top: 10px; left: 10px;
-    z-index: 5;
+    top: 14px; left: 10px;
+    z-index: 800;
+    width: 34px; height: 34px;
+    align-items: center; justify-content: center;
     background: var(--card);
     color: var(--accent);
     border: 1px solid var(--border);
     border-radius: 8px;
-    padding: 8px 12px;
-    font-size: 13px;
+    font-size: 16px;
     font-weight: bold;
     cursor: pointer;
     box-shadow: 0 4px 14px rgba(0,0,0,.4);
   }
-  .expand-sidebar-btn.visible { display: inline-block; }
+  .expand-sidebar-btn.visible { display: flex; }
   .collapse-sidebar-btn {
     background: transparent;
     border: 1px solid var(--border);
@@ -586,7 +587,7 @@
   </aside>
 
   <div class="history-map-area">
-    <button class="expand-sidebar-btn" id="expandSidebarBtn">☰ Mostrar filtros</button>
+    <button class="expand-sidebar-btn" id="expandSidebarBtn" title="Mostrar filtros">»</button>
     <div id="mapWrapHistory" style="height:calc(100vh - 160px); min-height:560px;">
       <!-- el div #map real se mueve aquí cuando la vista está en "history" -->
     </div>
@@ -661,6 +662,7 @@
   let currentView = "live";
 
   function setView(view) {
+    const previousView = currentView;
     currentView = view;
     closeNav();
 
@@ -670,6 +672,7 @@
       navBtnLive.classList.add("active");
       navBtnHistory.classList.remove("active");
       document.getElementById("mapWrapLive").appendChild(mapEl);
+      if (previousView === "history") exitHistoryMode();
     } else {
       liveView.style.display = "none";
       historyView.style.display = "flex";
@@ -681,6 +684,40 @@
     // Leaflet necesita que se le avise tras cambiar el tamaño/contenedor real
     // de su div, o el mapa queda mal recortado hasta que el usuario interactúe.
     setTimeout(() => map.invalidateSize(), 60);
+  }
+
+  // Al volver a "En Vivo" se apaga por completo el modo histórico: se
+  // desmarcan y borran todas las rutas dibujadas (para que no se sigan
+  // viendo encima del camión en vivo), se limpia la búsqueda por lugar, y
+  // se vuelve a traer el trazo en vivo actual — porque mientras se veía el
+  // histórico, ese trazo se había vaciado (ver updateHistoryViewState) y
+  // dejó de actualizarse con cada evento SSE (ver el "!viewingHistory" del
+  // listener de /events).
+  function exitHistoryMode() {
+    todosCheckbox.checked = false;
+    setAllRoutesVisible(false);
+
+    lastPassages = [];
+    passageMarkersLayer.clearLayers();
+    document.getElementById("passagesBanner").style.display = "none";
+    document.getElementById("clearPassages").style.display = "none";
+    if (placeMarker) { map.removeLayer(placeMarker); placeMarker = null; }
+    if (placeCircle) { map.removeLayer(placeCircle); placeCircle = null; }
+
+    viewingHistory = false;
+
+    fetch("/api/history")
+      .then((r) => r.json())
+      .then((points) => {
+        const latlngs = points.map((p) => [p.lat, p.lon]);
+        trail.setLatLngs(latlngs);
+        if (latlngs.length > 0) {
+          const last = latlngs[latlngs.length - 1];
+          marker.setLatLng(last);
+          if (followTruck) map.panTo(last, { animate: true, duration: 0.5 });
+        }
+      })
+      .catch(() => {});
   }
 
   navBtnLive.addEventListener("click", () => setView("live"));

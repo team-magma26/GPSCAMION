@@ -263,6 +263,34 @@
     font-family: 'Bricolage Grotesque', 'Sora', sans-serif; font-weight: 700; font-size: 26px; letter-spacing: -.3px;
     font-variant-numeric: lining-nums tabular-nums; color: #fff;
   }
+
+  /* ===== Estado del camión ===== */
+  .truck-status {
+    --s: var(--muted); display: flex; align-items: center; gap: 14px; padding: 14px 16px; margin-bottom: 16px; border-radius: 16px;
+    background: color-mix(in srgb, var(--s) 12%, rgba(13,27,42,.45)); border: 1px solid color-mix(in srgb, var(--s) 40%, var(--line));
+    transition: background .3s, border-color .3s;
+  }
+  .truck-status[data-state=move] { --s: var(--live); }
+  .truck-status[data-state=on]   { --s: var(--place); }
+  .truck-status[data-state=stop] { --s: var(--hist); }
+  .truck-status[data-state=off]  { --s: var(--muted); }
+  .truck-status[data-state=last] { --s: #b392f0; }
+  .ts-dot { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; background: var(--s); box-shadow: 0 0 0 4px color-mix(in srgb, var(--s) 25%, transparent); }
+  .truck-status[data-state=move] .ts-dot { animation: pulse 2s ease-in-out infinite; }
+  .ts-title { font-family: 'Bricolage Grotesque', 'Sora', sans-serif; font-weight: 700; font-size: 18px; line-height: 1.1; }
+  .ts-sub { font-size: 12px; color: var(--muted); margin-top: 3px; font-variant-numeric: tabular-nums; }
+
+  /* ===== Duración y distancia de rutas ===== */
+  .route-meta { font-size: 11.5px; color: var(--muted); margin: 3px 0 0 20px; font-variant-numeric: tabular-nums; }
+
+  /* ===== Resultados de búsqueda por lugar ===== */
+  .place-result { display: flex; flex-direction: column; gap: 6px; }
+  .hist-badge {
+    align-self: flex-start; font-size: 11px; font-weight: 700; padding: 2px 9px; border-radius: 999px;
+    background: rgba(138,151,173,.15); color: var(--muted); border: 1px solid var(--line);
+  }
+  .hist-badge.yes { background: color-mix(in srgb, var(--live) 16%, transparent); color: var(--live); border-color: color-mix(in srgb, var(--live) 40%, transparent); }
+  .hist-badge.no  { background: color-mix(in srgb, var(--hist) 12%, transparent); color: var(--hist); border-color: color-mix(in srgb, var(--hist) 35%, transparent); }
 </style>
 </head>
 <body data-mode="live">
@@ -305,7 +333,14 @@
       <div class="panel" id="livePanel">
         <div class="panel-title">En vivo
           <button type="button" class="info-btn" data-bs-toggle="popover" aria-label="Más información"
-            data-bs-title="En vivo" data-bs-content="Muestra dónde está el camión ahora mismo. El mapa se actualiza solo."></button>
+            data-bs-title="En vivo" data-bs-content="Muestra dónde está el camión ahora mismo. El mapa se actualiza solo. El estado indica si el camión está en movimiento o detenido. Si lleva más de 1 minuto sin enviar datos, muestra su última ruta."></button>
+        </div>
+        <div class="truck-status" id="truckStatus" data-state="last">
+          <span class="ts-dot"></span>
+          <div>
+            <div class="ts-title" id="truckStatusTitle">Última ruta del camión</div>
+            <div class="ts-sub" id="truckStatusSub">Cargando…</div>
+          </div>
         </div>
         <div class="d-flex align-items-center gap-2 mb-3">
           <div class="form-check form-switch m-0">
@@ -324,7 +359,6 @@
           <button type="button" class="info-btn" data-bs-toggle="popover" aria-label="Más información"
             data-bs-title="¿Qué es una ruta?" data-bs-content="Una ruta es un trayecto continuo del camión. Termina cuando pasa 1 minuto sin enviar datos, y el siguiente trayecto empieza como una ruta nueva. En el mapa, A es el inicio y B es el final. Marca las rutas que quieras ver."></button>
         </div>
-        <div class="muted mb-3">Una ruta termina cuando el camión pasa 1 minuto sin enviar datos.</div>
 
         <div class="row g-2">
           <div class="col-12 col-sm-6 col-lg-12">
@@ -383,7 +417,7 @@
       <div class="panel d-none" id="placePanel">
         <div class="panel-title">Buscar por lugar
           <button type="button" class="info-btn" data-bs-toggle="popover" aria-label="Más información"
-            data-bs-title="Buscar por lugar" data-bs-content="Descubre cuándo pasó el camión por un punto. Cada pasada muestra la hora de entrada y de salida de la zona."></button>
+            data-bs-title="Buscar por lugar" data-bs-content="Descubre cuándo pasó el camión por un punto. Cada pasada muestra la hora de entrada y de salida de la zona. Al buscar un lugar, cada resultado indica si el camión tiene historial ahí."></button>
         </div>
 
         <div class="field-label">1. Ve a un lugar</div>
@@ -395,7 +429,7 @@
 
         <div class="section-label">2. Marca el punto
           <button type="button" class="info-btn" data-bs-toggle="popover" aria-label="Más información"
-            data-bs-title="Radio de búsqueda" data-bs-content="Es la distancia alrededor del punto donde se busca al camión: 200 m. Cualquier lectura dentro del círculo azul cuenta como pasada."></button>
+            data-bs-title="Radio de búsqueda" data-bs-content="Es la distancia alrededor del punto donde se busca al camión: 200 m. Cada vez que el camión envía su ubicación se guarda una lectura. Si una lectura cae dentro del círculo azul, el camión pasó por ahí. Varias lecturas seguidas dentro del círculo, con menos de 5 minutos entre una y otra, se agrupan en una sola pasada, con su hora de entrada y de salida."></button>
         </div>
         <div class="muted" id="pickPrompt">Haz clic en el mapa.</div>
         <div class="point-chip d-none" id="pointChip"></div>
@@ -470,6 +504,47 @@
   const PAGE_SIZE = 5;
   const SIM_POINTS_PER_SEC = 4; // a velocidad 1×
   const ROUTE_COLORS = ["#f4a261", "#2ecc71", "#8ecae6", "#e63946", "#ffb703", "#9b5de5", "#00b4d8", "#ff7aa2"];
+  const SIGNAL_TIMEOUT_MS = 60000; // 1 minuto sin datos = sin señal
+  const MOVING_KMH = 3;            // por debajo de esta velocidad se considera detenido
+
+  // Distancia en metros entre dos puntos [lat, lon]
+  function distM(a, b) {
+    const R = 6371000, rad = Math.PI / 180;
+    const dLat = (b[0] - a[0]) * rad, dLon = (b[1] - a[1]) * rad;
+    const h = Math.sin(dLat / 2) ** 2 + Math.cos(a[0] * rad) * Math.cos(b[0] * rad) * Math.sin(dLon / 2) ** 2;
+    return 2 * R * Math.asin(Math.sqrt(h));
+  }
+  function fmtDistance(m) { return m < 1000 ? `${Math.round(m)} m` : `${(m / 1000).toFixed(1).replace(".", ",")} km`; }
+  function fmtDuration(ms) {
+    const min = Math.round(ms / 60000);
+    if (min < 1) return "menos de 1 min";
+    if (min < 60) return `${min} min`;
+    const h = Math.floor(min / 60), r = min % 60;
+    return r ? `${h} h ${r} min` : `${h} h`;
+  }
+  function hour24(h, str) {
+    if (/p\.?\s?m/i.test(str) && h < 12) return h + 12;
+    if (/a\.?\s?m/i.test(str) && h === 12) return 0;
+    return h;
+  }
+  function fmtLast(str) {
+    const t = parseTime(str);
+    if (t === null) return str;
+    const d = new Date(t), now = new Date();
+    const hh = String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0");
+    if (d.toDateString() === now.toDateString()) return `hoy ${hh}`;
+    return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")} ${hh}`;
+  }
+  // Intenta leer fechas como "2026-10-06 14:30:00" o "06/10/2026 14:30:00". Si no puede, devuelve null.
+  function parseTime(str) {
+    if (!str) return null;
+    str = String(str);
+    let m = str.match(/(\d{4})-(\d{2})-(\d{2})[ T](\d{1,2}):(\d{2})(?::(\d{2}))?/);
+    if (m) return new Date(+m[1], m[2] - 1, +m[3], hour24(+m[4], str), +m[5], +(m[6] || 0)).getTime();
+    m = str.match(/(\d{1,2})[\/-](\d{1,2})[\/-](\d{4}),?\s+(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+    if (m) return new Date(+m[3], m[2] - 1, +m[1], hour24(+m[4], str), +m[5], +(m[6] || 0)).getTime();
+    return null;
+  }
 
   // Tiles normales de OpenStreetMap: gratis y sin API key.
   function addTiles(m) {
@@ -590,7 +665,9 @@
     fetch("/api/history")
       .then((r) => r.json())
       .then((points) => {
+        setLastRouteFromPoints(points);
         trail.setLatLngs(points.map((p) => [p.lat, p.lon]));
+        refreshTruckStatus();
         if (points.length > 0) {
           const last = points[points.length - 1];
           marker.setLatLng([last.lat, last.lon]);
@@ -650,8 +727,13 @@
       updateHistoryViewState();
       return;
     }
-    if (route.loading) return;
+    route.failed = false;
+    loadRoutePoints(sessionId);
+  }
 
+  function loadRoutePoints(sessionId) {
+    const route = routesBySession.get(sessionId);
+    if (!route || route.loaded || route.loading || route.failed) return;
     route.loading = true;
     fetch(`/api/session_route?session_id=${encodeURIComponent(sessionId)}`)
       .then((r) => r.json())
@@ -659,10 +741,38 @@
         route.points = data.points || [];
         route.loaded = true;
         route.loading = false;
-        if (route.visible) drawRoute(route);
-        updateHistoryViewState();
+        if (route.visible) { drawRoute(route); updateHistoryViewState(); }
+        updateRouteStats(sessionId);
       })
-      .catch(() => { route.loading = false; });
+      .catch(() => { route.loading = false; route.failed = true; updateRouteStats(sessionId); });
+  }
+
+  function routeMetaText(route, s) {
+    if (route.failed) return "";
+    if (!route.loaded) return "Calculando…";
+    const pts = route.points;
+    let d = 0;
+    for (let i = 1; i < pts.length; i++) d += distM([pts[i - 1].lat, pts[i - 1].lon], [pts[i].lat, pts[i].lon]);
+    let t0 = parseTime(s.start_time), t1 = parseTime(s.end_time);
+    if ((t0 === null || t1 === null || t1 < t0) && pts.length > 1) {
+      t0 = parseTime(pts[0].time); t1 = parseTime(pts[pts.length - 1].time);
+    }
+    const parts = [];
+    if (t0 !== null && t1 !== null && t1 >= t0) parts.push(fmtDuration(t1 - t0));
+    parts.push(fmtDistance(d));
+    return parts.join(" · ");
+  }
+
+  function updateRouteStats(sessionId) {
+    const route = routesBySession.get(sessionId);
+    const s = sessionsList.find((x) => String(x.session_id) === String(sessionId));
+    if (!route || !s) return;
+    routesTableBody.querySelectorAll("tr[data-session-id]").forEach((tr) => {
+      if (tr.dataset.sessionId === String(sessionId)) {
+        const el = tr.querySelector(".route-meta");
+        if (el) el.textContent = routeMetaText(route, s);
+      }
+    });
   }
 
   function anyRouteVisible() {
@@ -868,7 +978,7 @@
       row.dataset.sessionId = s.session_id;
       row.innerHTML = `
         <td><input type="checkbox" class="form-check-input"${route.visible ? " checked" : ""}></td>
-        <td><span class="route-swatch" style="background:${route.color}"></span>${s.start_time} → ${s.end_time}</td>
+        <td><div><span class="route-swatch" style="background:${route.color}"></span>${s.start_time} → ${s.end_time}</div><div class="route-meta">${routeMetaText(route, s)}</div></td>
         <td>${s.points}</td>`;
       row.querySelector("input").addEventListener("change", (e) => {
         setRouteVisible(s.session_id, e.target.checked);
@@ -876,6 +986,7 @@
       });
       routesTableBody.appendChild(row);
     });
+    pageItems.forEach((s) => loadRoutePoints(s.session_id)); // calcula duración y distancia de la página visible
 
     $("pageInfo").textContent = sessionsList.length === 0 ? "Sin recorridos" : `Página ${currentPage + 1} de ${totalPages}`;
     $("prevPage").disabled = currentPage === 0;
@@ -936,13 +1047,74 @@
     loadRoutesTable();
   });
 
+  // ---------- Estado del camión ----------
+  const recentPoints = []; // últimas lecturas recibidas en vivo
+  let lastMsgAt = 0;
+  const lastRoute = { start: null, end: null }; // inicio y fin (gps_time) de la ruta más reciente
+
+  function setLastRouteFromPoints(points) {
+    lastRoute.start = points.length ? points[0].time : null;
+    lastRoute.end = points.length ? points[points.length - 1].time : null;
+  }
+
+  function showLastRoute() {
+    if (!lastRoute.end) { setTruckStatus("off", "Sin recorridos aún", "Esperando datos del camión"); return; }
+    const parts = [];
+    const t0 = parseTime(lastRoute.start), t1 = parseTime(lastRoute.end);
+    if (t0 !== null && t1 !== null && t1 >= t0) parts.push(fmtDuration(t1 - t0));
+    const pts = trail.getLatLngs();
+    if (pts.length > 1) {
+      let d = 0;
+      for (let i = 1; i < pts.length; i++) d += distM([pts[i - 1].lat, pts[i - 1].lng], [pts[i].lat, pts[i].lng]);
+      parts.push(fmtDistance(d));
+    }
+    parts.push("última lectura " + fmtLast(lastRoute.end));
+    setTruckStatus("last", "Última ruta del camión", parts.join(" · "));
+  }
+
+  function setTruckStatus(state, title, sub) {
+    $("truckStatus").dataset.state = state;
+    $("truckStatusTitle").textContent = title;
+    $("truckStatusSub").textContent = sub;
+  }
+
+  function refreshTruckStatus() {
+    if (!lastMsgAt || Date.now() - lastMsgAt > SIGNAL_TIMEOUT_MS) {
+      recentPoints.length = 0;
+      showLastRoute();
+      return;
+    }
+    if (recentPoints.length < 2) { setTruckStatus("on", "En línea", "Recibiendo datos"); return; }
+    const a = recentPoints[0], b = recentPoints[recentPoints.length - 1];
+    const hours = (b.t - a.t) / 3600000;
+    const kmh = hours > 0 ? distM([a.lat, a.lon], [b.lat, b.lon]) / 1000 / hours : 0;
+    if (kmh >= MOVING_KMH) setTruckStatus("move", "En movimiento", `${Math.round(kmh)} km/h`);
+    else setTruckStatus("stop", "Detenido", "Sin desplazamiento");
+  }
+
+  function trackTruck(lat, lon, data) {
+    const now = Date.now();
+    lastMsgAt = now;
+    if (data && data.date) {
+      lastRoute.end = `${data.date} ${data.time}`;
+      if (!lastRoute.start) lastRoute.start = lastRoute.end;
+    }
+    recentPoints.push({ t: now, lat: Number(lat), lon: Number(lon) });
+    while (recentPoints.length > 1 && now - recentPoints[0].t > 60000) recentPoints.shift();
+    refreshTruckStatus();
+  }
+  refreshTruckStatus();
+  setInterval(refreshTruckStatus, 5000);
+
   // ---------- Carga inicial en vivo ----------
   fetch("/api/history")
     .then((r) => r.json())
     .then((points) => {
+      setLastRouteFromPoints(points);
       if (historyMode) return;
       const latlngs = points.map((p) => [p.lat, p.lon]);
       trail.setLatLngs(latlngs);
+      refreshTruckStatus();
       if (latlngs.length > 0) {
         marker.setLatLng(latlngs[latlngs.length - 1]);
         map.fitBounds(trail.getBounds(), { maxZoom: 15, padding: [20, 20] });
@@ -965,6 +1137,7 @@
     const data = JSON.parse(event.data);
 
     if (data.type === "session_start") {
+      lastRoute.start = null;
       if (!historyMode) {
         trail.setLatLngs([]);
         mapCentered = false;
@@ -974,6 +1147,7 @@
     }
 
     updateFields(data);
+    if (data.lat !== null && data.lon !== null) trackTruck(data.lat, data.lon, data);
     if (data.lat !== null && data.lon !== null && !historyMode) updateMap(data.lat, data.lon, true);
   };
 
@@ -1009,6 +1183,24 @@
     $("placeExtras").classList.remove("d-none");
   }
 
+  // Revisa si el camión tiene historial en la zona del resultado (usa el tamaño del lugar como radio).
+  function checkPlaceHistory(it, badge) {
+    const lat = parseFloat(it.lat), lon = parseFloat(it.lon);
+    let radius = PASSAGE_RADIUS_M;
+    if (Array.isArray(it.boundingbox) && it.boundingbox.length === 4) {
+      const [south, north, west, east] = it.boundingbox.map(Number);
+      radius = Math.min(Math.max(distM([south, west], [north, east]) / 2, PASSAGE_RADIUS_M), 50000);
+    }
+    fetch(`/api/has_history?lat=${lat}&lon=${lon}&radius=${Math.round(radius)}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.error || typeof data.has_history !== "boolean") throw new Error("sin datos");
+        badge.textContent = data.has_history ? "Con historial" : "Sin historial";
+        badge.classList.add(data.has_history ? "yes" : "no");
+      })
+      .catch(() => { badge.textContent = "No se pudo revisar el historial"; });
+  }
+
   // 1) Buscar un lugar por nombre (Nominatim / OpenStreetMap) y llevar el mapa hasta allá.
   function searchPlace() {
     const q = $("placeQuery").value.trim();
@@ -1028,7 +1220,13 @@
           const btn = document.createElement("button");
           btn.type = "button";
           btn.className = "list-group-item list-group-item-action place-result";
-          btn.textContent = it.display_name;
+          const nameEl = document.createElement("span");
+          nameEl.textContent = it.display_name;
+          const badge = document.createElement("span");
+          badge.className = "hist-badge";
+          badge.textContent = "Revisando historial…";
+          btn.append(nameEl, badge);
+          checkPlaceHistory(it, badge);
           btn.addEventListener("click", () => {
             const lat = parseFloat(it.lat), lon = parseFloat(it.lon);
             placeMap.flyTo([lat, lon], 15);

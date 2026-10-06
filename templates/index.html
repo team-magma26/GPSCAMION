@@ -298,6 +298,27 @@
   #statsCard .stat-tile .stat-label { margin-bottom: 6px; }
   #statsCard .stat-tile .stat-value { font-size: 21px; }
   #statsCard .col-6 .stat-value { font-size: 17px; }
+
+  /* ===== Barra superior retraíble (celular) ===== */
+  .top-extra { display: none; flex: 1 0 100%; flex-wrap: wrap; gap: .6rem; }
+  .topbar.open .top-extra { display: flex; }
+  #topToggle { display: inline-grid; place-items: center; width: 38px; height: 38px; padding: 0; flex-shrink: 0; }
+  #topToggle svg { transition: transform .25s; }
+  .topbar.open #topToggle svg { transform: rotate(180deg); }
+  @media (min-width: 992px) {
+    .topbar .top-extra, .topbar.open .top-extra { display: contents; }
+  }
+  @media (max-width: 991px) {
+    .topbar { position: static; }
+    .topbar > .container-fluid { padding-top: .65rem !important; padding-bottom: .65rem !important; gap: .75rem !important; }
+    .logo { width: 44px; height: 44px; border-radius: 14px; }
+    .logo::after { inset: -4px; border-radius: 17px; }
+    .logo svg { width: 24px; height: 24px; }
+    .brand { flex: 1 1 0; min-width: 0; }
+    .brand h1 { font-size: 1.4rem; letter-spacing: -.5px; }
+    .topbar:not(.open) .app-sub { display: none; }
+    main.container-fluid { margin-top: 1rem !important; }
+  }
 </style>
 </head>
 <body data-mode="live">
@@ -313,8 +334,13 @@
       <h1>Rastreador de camión</h1>
       <span class="app-sub">{{ app_name }}</span>
     </div>
-    <button type="button" class="btn btn-quiet btn-sm" id="mapThemeBtn">☾ Mapa oscuro</button>
-    <div class="status"><span class="dot" id="dot"></span><span id="status">Conectando…</span></div>
+    <button type="button" class="btn btn-quiet btn-sm d-lg-none" id="topToggle" aria-expanded="false" aria-label="Mostrar u ocultar opciones">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+    </button>
+    <div class="top-extra">
+      <button type="button" class="btn btn-quiet btn-sm" id="mapThemeBtn">☾ Mapa oscuro</button>
+      <div class="status"><span class="dot" id="dot"></span><span id="status">Conectando…</span></div>
+    </div>
   </div>
 </header>
 
@@ -1316,6 +1342,12 @@
     $("passStart").value = "";
     $("passEnd").value = "";
     $("placeResults").innerHTML = "";
+  });
+
+  // ---------- Barra superior retraíble (celular) ----------
+  $("topToggle").addEventListener("click", () => {
+    const open = document.querySelector(".topbar").classList.toggle("open");
+    $("topToggle").setAttribute("aria-expanded", open);
   });
 
   // ---------- Tema del mapa (claro / oscuro) ----------

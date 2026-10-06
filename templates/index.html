@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>{{ app_name }} — Live</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns=%22http://www.w3.org/2000/svg%22%20viewBox=%220%200%2032%2032%22%3E%3Cdefs%3E%3ClinearGradient%20id=%22g%22%20x1=%220%22%20y1=%220%22%20x2=%221%22%20y2=%221%22%3E%3Cstop%20offset=%220%22%20stop-color=%22%23a8dcf0%22/%3E%3Cstop%20offset=%221%22%20stop-color=%22%235aa9d6%22/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect%20width=%2232%22%20height=%2232%22%20rx=%228%22%20fill=%22url%28%23g%29%22/%3E%3Cg%20transform=%22translate%284%204%29%22%20fill=%22none%22%20stroke=%22%230d1b2a%22%20stroke-width=%221.9%22%20stroke-linecap=%22round%22%20stroke-linejoin=%22round%22%3E%3Cpath%20d=%22M1%206h13v10H1z%22/%3E%3Cpath%20d=%22M14%209h4l3%203v4h-7z%22/%3E%3Ccircle%20cx=%226%22%20cy=%2218%22%20r=%222%22/%3E%3Ccircle%20cx=%2217%22%20cy=%2218%22%20r=%222%22/%3E%3C/g%3E%3C/svg%3E">
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -291,6 +292,12 @@
   }
   .hist-badge.yes { background: color-mix(in srgb, var(--live) 16%, transparent); color: var(--live); border-color: color-mix(in srgb, var(--live) 40%, transparent); }
   .hist-badge.no  { background: color-mix(in srgb, var(--hist) 12%, transparent); color: var(--hist); border-color: color-mix(in srgb, var(--hist) 35%, transparent); }
+
+  /* ===== Posición actual en la barra lateral ===== */
+  #statsCard .stat-tile { padding: 12px 14px 14px; }
+  #statsCard .stat-tile .stat-label { margin-bottom: 6px; }
+  #statsCard .stat-tile .stat-value { font-size: 21px; }
+  #statsCard .col-6 .stat-value { font-size: 17px; }
 </style>
 </head>
 <body data-mode="live">
@@ -351,6 +358,21 @@
             data-bs-title="Seguir camión" data-bs-content="Mantiene el mapa centrado en el camión. Se apaga solo si mueves el mapa."></button>
         </div>
         <button class="btn btn-quiet btn-sm" id="clearTrail">Limpiar línea del recorrido</button>
+      </div>
+
+      <!-- POSICIÓN ACTUAL (solo en vivo) -->
+      <div class="panel" id="statsCard">
+        <div class="panel-title">Posición actual</div>
+        <div class="row g-2">
+          <div class="col-12"><div class="stat-tile" style="--c:#8ecae6">
+            <span class="stat-label">Latitud</span><span class="stat-value" id="lat">--</span></div></div>
+          <div class="col-12"><div class="stat-tile" style="--c:#2ecc71">
+            <span class="stat-label">Longitud</span><span class="stat-value" id="lon">--</span></div></div>
+          <div class="col-6"><div class="stat-tile" style="--c:#f4a261">
+            <span class="stat-label">Fecha</span><span class="stat-value" id="date">--</span></div></div>
+          <div class="col-6"><div class="stat-tile" style="--c:#b392f0">
+            <span class="stat-label">Hora</span><span class="stat-value" id="time">--</span></div></div>
+        </div>
       </div>
 
       <!-- HISTÓRICO: RECORRIDOS -->
@@ -468,19 +490,6 @@
         <div id="placeMap" class="map"></div>
       </div>
 
-      <div class="panel mt-3" id="statsCard">
-        <div class="panel-title">Posición actual</div>
-        <div class="row g-3">
-          <div class="col-6 col-md-3"><div class="stat-tile" style="--c:#8ecae6">
-            <span class="stat-label">Latitud</span><span class="stat-value" id="lat">--</span></div></div>
-          <div class="col-6 col-md-3"><div class="stat-tile" style="--c:#2ecc71">
-            <span class="stat-label">Longitud</span><span class="stat-value" id="lon">--</span></div></div>
-          <div class="col-6 col-md-3"><div class="stat-tile" style="--c:#f4a261">
-            <span class="stat-label">Fecha</span><span class="stat-value" id="date">--</span></div></div>
-          <div class="col-6 col-md-3"><div class="stat-tile" style="--c:#b392f0">
-            <span class="stat-label">Hora</span><span class="stat-value" id="time">--</span></div></div>
-        </div>
-      </div>
     </section>
 
   </div>

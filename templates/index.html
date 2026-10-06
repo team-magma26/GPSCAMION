@@ -1,496 +1,498 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="es" data-bs-theme="dark">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>{{ app_name }} — Live</title>
 
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
 <style>
   :root {
-    --bg: #0d1b2a;
-    --card: #1b263b;
-    --border: #2a3a55;
-    --accent: #8ecae6;
-    --accent-soft: rgba(142, 202, 230, 0.12);
-    --muted: #6c7a91;
-    --live: #2ecc71;
-    --history: #f4a261;
-    --history-soft: rgba(244, 162, 97, 0.14);
+    --ink: #0d1b2a; --surface: #1b263b; --raise: #243350; --line: #2a3a55;
+    --text: #ffffff; --muted: #8a97ad;
+    --live: #2ecc71; --hist: #f4a261; --place: #8ecae6;
+    --accent: #8ecae6; --r: 16px;
   }
-
-  * { box-sizing: border-box; }
+  [data-bs-theme=dark] { --bs-body-bg: var(--ink); --bs-body-color: var(--text); --bs-border-color: var(--line); }
 
   body {
-    font-family: Arial, sans-serif;
-    background: var(--bg);
-    color: #ffffff;
-    margin: 0;
-    padding-bottom: 40px;
+    font-family: 'Manrope', system-ui, -apple-system, 'Segoe UI', Arial, sans-serif;
+    padding-bottom: 48px;
+    background: radial-gradient(1100px 480px at 90% -10%, color-mix(in srgb, var(--accent) 12%, transparent), transparent) var(--ink) no-repeat;
+    transition: background .4s;
   }
 
-  /* ---------- Barra de título ---------- */
-  .topbar {
-    background: var(--card);
-    border-bottom: 1px solid var(--border);
-    box-shadow: 0 4px 14px rgba(0,0,0,.4);
-  }
-  .topbar-inner {
-    width: 94%;
-    max-width: 1100px;
-    margin: 0 auto;
-    padding: 14px 0;
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 16px;
-  }
+  /* ---- Barra superior ---- */
+  .topbar { border-bottom: 1px solid var(--line); background: rgba(27,38,59,.85); backdrop-filter: blur(10px); }
   .logo {
-    width: 48px; height: 48px;
-    flex-shrink: 0;
-    display: grid; place-items: center;
-    border-radius: 12px;
-    background: var(--accent-soft);
-    border: 1px solid var(--border);
-    color: var(--accent);
+    width: 46px; height: 46px; flex-shrink: 0; display: grid; place-items: center; border-radius: 14px;
+    background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--accent);
+    border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
   }
-  .logo svg { width: 28px; height: 28px; }
-  .titles { flex: 1; min-width: 200px; }
-  h1 { font-size: 22px; color: var(--accent); margin: 0; letter-spacing: .3px; }
-  .role {
-    display: inline-block;
-    margin-top: 6px;
-    padding: 2px 10px;
-    border-radius: 999px;
-    background: var(--accent-soft);
-    color: var(--accent);
-    font-size: 11px;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-  }
+  .logo svg { width: 26px; height: 26px; }
+  h1 { font-size: 1.3rem; font-weight: 800; margin: 0; letter-spacing: -.2px; }
+  .role { font-size: 12px; color: var(--muted); font-weight: 500; }
   .status {
-    display: flex; align-items: center; gap: 8px;
-    padding: 7px 14px;
-    border-radius: 999px;
-    background: var(--bg);
-    border: 1px solid var(--border);
-    font-size: 12px;
-    color: var(--muted);
+    display: flex; align-items: center; gap: 8px; padding: 7px 14px; border-radius: 999px;
+    background: var(--surface); border: 1px solid var(--line); font-size: 12px; color: var(--muted); font-weight: 500;
   }
-  .dot {
-    display: inline-block; width: 8px; height: 8px; border-radius: 50%;
-    background: var(--muted);
-  }
-  .dot.live { background: var(--live); box-shadow: 0 0 0 3px rgba(46, 204, 113, 0.2); }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex-shrink: 0; }
+  .dot.live { background: var(--live); box-shadow: 0 0 0 3px rgba(46,204,113,.22); }
 
-  /* ---------- Contenido ---------- */
-  .wrap { width: 94%; max-width: 1100px; margin: 22px auto 0; }
+  /* ---- Selectores de vista ---- */
+  .seg { display: inline-flex; background: var(--surface); border: 1px solid var(--line); border-radius: 999px; padding: 4px; }
+  .seg input { position: absolute; opacity: 0; pointer-events: none; }
+  .seg label {
+    padding: 8px 22px; border-radius: 999px; cursor: pointer; font-weight: 700; font-size: 14px;
+    color: var(--muted); transition: background .2s, color .2s; margin: 0;
+  }
+  .seg label:hover { color: var(--text); }
+  .seg input:checked + label { background: var(--accent); color: #0d1b2a; }
+  .seg input:focus-visible + label { outline: 2px solid #fff; outline-offset: 2px; }
+  .seg.sm label { padding: 6px 16px; font-size: 13px; }
 
-  .panel {
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    box-shadow: 0 4px 14px rgba(0,0,0,.4);
-    padding: 16px 22px;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 22px;
-    margin-bottom: 14px;
-  }
-  .group { display: flex; flex-direction: column; gap: 10px; }
-  .group.grow { flex: 1; }
-  .group-title {
-    font-size: 11px;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-    color: var(--muted);
-    font-weight: bold;
-  }
-  .group-body { display: flex; align-items: center; flex-wrap: wrap; gap: 14px; font-size: 14px; color: var(--accent); }
-  .divider { width: 1px; align-self: stretch; background: var(--border); }
+  /* ---- Paneles ---- */
+  .panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 20px; margin-bottom: 16px; }
+  .panel-title { font-size: 16px; font-weight: 800; display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
+  .panel-title::before { content: ""; width: 4px; height: 18px; border-radius: 2px; background: var(--accent); }
+  .field-label { font-size: 12px; color: var(--muted); font-weight: 700; margin-bottom: 6px; display: flex; align-items: center; gap: 6px; }
+  .section-label { font-size: 13px; font-weight: 700; margin: 20px 0 10px; display: flex; align-items: center; gap: 8px; }
+  .muted { color: var(--muted); font-size: 13px; }
 
-  /* Interruptor "Seguir camión" */
-  .switch { display: flex; align-items: center; gap: 10px; cursor: pointer; user-select: none; }
-  .switch input { display: none; }
-  .slider {
-    width: 38px; height: 22px; border-radius: 999px;
-    background: var(--border);
-    position: relative;
-    transition: background .2s;
+  /* Botón "i" de información */
+  .info-btn {
+    width: 20px; height: 20px; padding: 0; border-radius: 50%; flex-shrink: 0; cursor: pointer;
+    background: transparent; color: var(--accent); border: 1.5px solid var(--accent);
+    font: italic 700 12px/1 Georgia, serif; display: inline-grid; place-items: center; transition: background .15s;
   }
-  .slider::after {
-    content: "";
-    position: absolute; top: 3px; left: 3px;
-    width: 16px; height: 16px; border-radius: 50%;
-    background: var(--muted);
-    transition: transform .2s, background .2s;
-  }
-  .switch input:checked + .slider { background: var(--accent-soft); box-shadow: inset 0 0 0 1px var(--accent); }
-  .switch input:checked + .slider::after { transform: translateX(16px); background: var(--accent); }
+  .info-btn:hover, .info-btn[aria-describedby] { background: var(--accent); color: #0d1b2a; }
+  .popover { --bs-popover-bg: var(--raise); --bs-popover-border-color: var(--line); --bs-popover-max-width: 290px; font-family: inherit; }
+  .popover-header { font-weight: 800; background: transparent; }
+  .popover-body { font-size: 13px; line-height: 1.5; }
 
-  .date-field { display: flex; align-items: center; gap: 8px; }
-  input[type="datetime-local"] {
-    background: var(--bg);
-    color: #ffffff;
-    color-scheme: dark;
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 8px 10px;
-    font-family: inherit;
-    font-size: 13px;
+  /* Controles */
+  .form-control, .form-select { background-color: var(--raise); border-color: var(--line); color: var(--text); border-radius: 10px; font-size: 14px; }
+  .form-control:focus, .form-select:focus {
+    background-color: var(--raise); border-color: var(--accent); color: var(--text);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent);
   }
-  input[type="datetime-local"]:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .form-control::placeholder { color: var(--muted); }
+  .btn { border-radius: 10px; font-weight: 700; font-size: 14px; }
+  .btn-accent { background: var(--accent); color: #0d1b2a; border: 0; }
+  .btn-accent:hover, .btn-accent:focus { background: var(--accent); color: #0d1b2a; filter: brightness(1.1); }
+  .btn-quiet { background: var(--raise); color: var(--text); border: 1px solid var(--line); }
+  .btn-quiet:hover { background: #33456a; color: #fff; }
+  .btn:disabled { opacity: .35; }
+  .form-check-input:checked { background-color: var(--accent); border-color: var(--accent); }
+  .form-check-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent); }
+  .form-range::-webkit-slider-thumb { background: var(--accent); }
+  .form-range::-moz-range-thumb { background: var(--accent); }
+  .form-range:focus::-webkit-slider-thumb { box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 30%, transparent); }
 
-  .btn {
-    background: var(--border);
-    color: var(--accent);
-    border: 1px solid transparent;
-    border-radius: 8px;
-    padding: 8px 16px;
-    font-size: 13px;
-    font-weight: bold;
-    cursor: pointer;
-    transition: background .15s;
+  .notice {
+    background: color-mix(in srgb, var(--accent) 10%, transparent); border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+    border-radius: 12px; padding: 12px 14px; font-size: 13px; margin-top: 14px;
   }
-  .btn:hover { background: #33456a; }
-  .btn.primary { background: var(--accent); color: var(--bg); }
-  .btn.primary:hover { background: #a4d6ec; }
-  .btn.history { background: var(--history-soft); color: var(--history); border-color: var(--history); }
-  .btn.history:hover { background: rgba(244, 162, 97, 0.22); }
+  .pass-item {
+    width: 100%; text-align: left; background: transparent; border: 0; color: var(--text);
+    padding: 7px 8px; border-radius: 8px; font-size: 13px;
+  }
+  .pass-item:hover { background: color-mix(in srgb, var(--accent) 14%, transparent); }
+  .point-chip {
+    display: inline-block; padding: 6px 12px; border-radius: 999px; font-size: 12px; font-weight: 600;
+    background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent);
+    border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+    font-variant-numeric: tabular-nums;
+  }
+  .place-result { text-align: left; font-size: 13px; background: transparent; color: var(--text); border-color: var(--line); }
+  .place-result:hover { background: var(--raise); color: #fff; }
 
-  #historyBanner {
-    display: none;
-    background: var(--history-soft);
-    border: 1px solid var(--history);
-    color: #ffffff;
-    padding: 10px 20px;
-    border-radius: 10px;
-    font-size: 13px;
-    margin-bottom: 14px;
-  }
+  /* Tabla de recorridos */
+  .routes-table { font-size: 13px; margin: 0; --bs-table-bg: transparent; }
+  .routes-table th { color: var(--muted); font-size: 12px; font-weight: 600; }
+  .routes-table td, .routes-table th { border-color: var(--line); }
+  .routes-table .todos-row td { font-weight: 800; color: var(--accent); }
+  .route-swatch { width: 12px; height: 12px; border-radius: 50%; display: inline-block; margin-right: 8px; vertical-align: middle; }
+  .sim-box { border-top: 1px solid var(--line); margin-top: 18px; padding-top: 16px; }
 
-  #passagesBanner {
-    display: none;
-    background: var(--history-soft);
-    border: 1px solid var(--history);
-    color: #ffffff;
-    padding: 10px 20px;
-    border-radius: 10px;
-    font-size: 13px;
-    margin-bottom: 14px;
-  }
-  #passagesBanner ul { margin: 8px 0 0 18px; padding: 0; }
-  #passagesBanner li { margin-bottom: 4px; }
-
-  /* ---------- Modal de validación (reemplaza los alert() nativos) ---------- */
-  .modal-overlay {
-    display: none;
-    position: fixed;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.55);
-    z-index: 1000;
-    align-items: center;
-    justify-content: center;
-  }
-  .modal-overlay.open { display: flex; }
-  .modal-card {
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    box-shadow: 0 8px 30px rgba(0,0,0,.5);
-    padding: 22px 24px;
-    max-width: 380px;
-    width: 90%;
-  }
-  .modal-card p {
-    margin: 0 0 16px;
-    font-size: 14px;
-    line-height: 1.5;
-    color: #ffffff;
-  }
-  .modal-card .btn { width: 100%; }
-
-  /* ---------- Tabla de recorridos (colapsable, paginada) ---------- */
-  #routesTablePanel {
-    display: none;
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 10px 18px;
-    margin-bottom: 14px;
-  }
-  #routesTablePanel.open { display: block; }
-  table.routes-table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 13px;
-  }
-  table.routes-table th {
-    text-align: left;
-    padding: 8px 10px;
-    color: var(--muted);
-    font-size: 11px;
-    text-transform: uppercase;
-    letter-spacing: .5px;
-    border-bottom: 1px solid var(--border);
-  }
-  table.routes-table td {
-    padding: 8px 10px;
-    border-bottom: 1px solid var(--border);
-  }
-  table.routes-table tr:last-child td { border-bottom: none; }
-  table.routes-table tr.todos-row td {
-    font-weight: bold;
-    color: var(--accent);
-  }
-  table.routes-table input[type="checkbox"] {
-    width: 16px; height: 16px;
-    accent-color: var(--accent);
-    cursor: pointer;
-  }
-  .route-swatch {
-    width: 12px; height: 12px;
-    border-radius: 50%;
-    display: inline-block;
-    margin-right: 8px;
-    vertical-align: middle;
-  }
-
-  /* Paginador de la tabla */
-  .pager {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 14px;
-    padding-top: 10px;
-    font-size: 12px;
-    color: var(--muted);
-  }
-  .pager .btn { padding: 4px 12px; }
-  .pager .btn:disabled { opacity: .35; cursor: default; }
-
-  /* Marcadores de inicio/fin de cada recorrido histórico */
-  .route-endpoint {
-    width: 22px; height: 22px;
-    display: grid; place-items: center;
-    border-radius: 50%;
-    color: #0d1b2a;
-    font-weight: bold;
-    font-size: 11px;
-    border: 2px solid #0d1b2a;
-    box-shadow: 0 2px 8px rgba(0,0,0,.5);
-  }
-
-  #map {
-    width: 100%;
-    height: 560px;
-    border-radius: 14px;
-    border: 1px solid var(--border);
-    box-shadow: 0 4px 14px rgba(0,0,0,.4);
-  }
-
-  /* Camión como marcador del mapa */
+  /* ---- Mapas ---- */
+  .map { width: 100%; height: 68vh; min-height: 400px; border-radius: var(--r); border: 1px solid var(--line); }
+  .leaflet-container { background: #0d1b2a; font-family: inherit; }
+  .leaflet-popup-content-wrapper, .leaflet-popup-tip { background: var(--raise); color: var(--text); }
+  .leaflet-container a.leaflet-popup-close-button { color: var(--muted); }
   .truck-pin {
-    width: 40px; height: 40px;
-    display: grid; place-items: center;
-    border-radius: 50%;
-    background: var(--card);
-    border: 2px solid var(--accent);
-    color: var(--accent);
-    box-shadow: 0 2px 10px rgba(0,0,0,.5);
+    position: relative; width: 40px; height: 40px; display: grid; place-items: center; border-radius: 50%;
+    background: var(--surface); border: 2px solid var(--live); color: var(--live); box-shadow: 0 2px 10px rgba(0,0,0,.5);
   }
+  .truck-pin::after { content: ""; position: absolute; inset: -2px; border-radius: 50%; border: 2px solid currentColor; animation: ping 2s ease-out infinite; }
+  .truck-pin.sim { border-color: var(--hist); color: var(--hist); }
+  .truck-pin.sim::after { animation: none; display: none; }
   .truck-pin svg { width: 22px; height: 22px; }
+  @keyframes ping { from { transform: scale(1); opacity: .7; } to { transform: scale(1.9); opacity: 0; } }
+  @media (prefers-reduced-motion: reduce) { .truck-pin::after { animation: none; display: none; } }
+  .route-endpoint {
+    width: 24px; height: 24px; display: grid; place-items: center; border-radius: 50%;
+    color: #0d1b2a; font-weight: 800; font-size: 11px; border: 2px solid #0d1b2a; box-shadow: 0 2px 8px rgba(0,0,0,.5);
+  }
+  .place-pin { width: 20px; height: 20px; border-radius: 50%; background: var(--place); border: 3px solid #fff; box-shadow: 0 0 0 5px rgba(142,202,230,.35); }
 
-  /* Tarjeta "Posición Actual" */
-  .stats-card {
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    box-shadow: 0 4px 14px rgba(0,0,0,.4);
-    padding: 16px 22px;
-    margin-top: 18px;
-  }
-  .stats-card-title {
-    font-size: 13px;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-    color: var(--accent);
-    font-weight: bold;
-    margin-bottom: 14px;
-  }
-  .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
-  .label {
-    display: block;
-    margin-bottom: 6px;
-    font-size: 11px;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-    color: var(--accent);
-    font-weight: bold;
-  }
-  .value { font-family: "Courier New", monospace; font-size: 20px; }
+  .stat-label { display: block; font-size: 12px; font-weight: 700; color: var(--muted); margin-bottom: 4px; }
+  .stat-value { font-size: 20px; font-weight: 800; font-variant-numeric: tabular-nums; word-break: break-all; }
 
-  @media (max-width: 760px) {
-    .stats-grid { grid-template-columns: repeat(2, 1fr); }
-    #map { height: 420px; }
-    .divider { display: none; }
-  }
+  @media (max-width: 991px) { .map { height: 55vh; min-height: 340px; } }
+  @media (max-width: 480px) { .seg label { padding: 8px 16px; } }
 </style>
 </head>
-<body>
+<body data-mode="live">
 
 <header class="topbar">
-  <div class="topbar-inner">
+  <div class="container-xl py-3 d-flex align-items-center flex-wrap gap-3">
     <div class="logo" id="logoIcon">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M1 6h13v10H1z"/>
-        <path d="M14 9h4l3 3v4h-7z"/>
-        <circle cx="6" cy="18" r="2"/>
-        <circle cx="17" cy="18" r="2"/>
+        <path d="M1 6h13v10H1z"/><path d="M14 9h4l3 3v4h-7z"/><circle cx="6" cy="18" r="2"/><circle cx="17" cy="18" r="2"/>
       </svg>
     </div>
-    <div class="titles">
+    <div class="flex-grow-1">
       <h1>{{ app_name }}</h1>
-      <span class="role">modo: {{ role }}</span>
+      <span class="role">Modo: {{ role }}</span>
     </div>
-    <div class="status"><span class="dot" id="dot"></span><span id="status">Connecting…</span></div>
+    <div class="status"><span class="dot" id="dot"></span><span id="status">Conectando…</span></div>
   </div>
 </header>
 
-<main class="wrap">
+<main class="container-xl mt-4">
 
-  <section class="panel">
-    <div class="group">
-      <span class="group-title">En vivo</span>
-      <div class="group-body">
-        <label class="switch">
-          <input type="checkbox" id="followToggle" checked>
-          <span class="slider"></span>
-          Seguir camión
-        </label>
-        <button class="btn" id="clearTrail">Limpiar recorrido</button>
-      </div>
+  <div class="d-flex flex-wrap align-items-center gap-3 mb-4">
+    <div class="seg" role="radiogroup" aria-label="Modo">
+      <input type="radio" name="mode" id="modeLive" checked><label for="modeLive">En vivo</label>
+      <input type="radio" name="mode" id="modeHistory"><label for="modeHistory">Histórico</label>
     </div>
-
-    <div class="divider"></div>
-
-    <div class="group grow">
-      <span class="group-title">Recorrido histórico</span>
-      <div class="group-body">
-        <label class="date-field">Desde <input type="datetime-local" id="historyStart"></label>
-        <label class="date-field">Hasta <input type="datetime-local" id="historyEnd"></label>
-        <button class="btn primary" id="filterRoutesByDate">Filtrar por fecha</button>
-        <button class="btn" id="toggleRoutesTable">Ver tabla de recorridos</button>
-        <button class="btn history" id="backToLive" style="display:none;">Limpiar y volver a en vivo</button>
-      </div>
-    </div>
-  </section>
-
-  <div id="routesTablePanel">
-    <table class="routes-table">
-      <thead>
-        <tr><th></th><th>Recorrido</th><th>Puntos</th></tr>
-      </thead>
-      <tbody id="routesTableBody">
-        <tr class="todos-row">
-          <td><input type="checkbox" id="routesTodosCheckbox"></td>
-          <td colspan="2">Todos</td>
-        </tr>
-      </tbody>
-    </table>
-    <div class="pager">
-      <button class="btn" id="prevPage">‹</button>
-      <span id="pageInfo"></span>
-      <button class="btn" id="nextPage">›</button>
+    <div class="seg sm d-none" id="subNav" role="radiogroup" aria-label="Tipo de consulta histórica">
+      <input type="radio" name="sub" id="subRoutes" checked><label for="subRoutes">Recorridos</label>
+      <input type="radio" name="sub" id="subPlace"><label for="subPlace">Por lugar</label>
     </div>
   </div>
 
-  <section class="panel">
-    <div class="group grow">
-      <span class="group-title">Buscar por lugar</span>
-      <div class="group-body">
-        <button class="btn" id="pickLocationBtn">Seleccionar punto en el mapa</button>
-        <button class="btn primary" id="searchPassages">Buscar pasadas</button>
-        <button class="btn history" id="clearPassages" style="display:none;">Limpiar búsqueda</button>
+  <div class="row g-4">
+
+    <!-- ============ PANELES ============ -->
+    <aside class="col-12 col-lg-4">
+
+      <!-- EN VIVO -->
+      <div class="panel" id="livePanel">
+        <div class="panel-title">En vivo
+          <button type="button" class="info-btn" data-bs-toggle="popover" aria-label="Más información"
+            data-bs-title="En vivo" data-bs-content="Muestra dónde está el camión ahora mismo. El mapa se actualiza solo."></button>
+        </div>
+        <div class="d-flex align-items-center gap-2 mb-3">
+          <div class="form-check form-switch m-0">
+            <input class="form-check-input" type="checkbox" id="followToggle" checked>
+            <label class="form-check-label" for="followToggle">Seguir camión</label>
+          </div>
+          <button type="button" class="info-btn" data-bs-toggle="popover" aria-label="Más información"
+            data-bs-title="Seguir camión" data-bs-content="Mantiene el mapa centrado en el camión. Se apaga solo si mueves el mapa."></button>
+        </div>
+        <button class="btn btn-quiet btn-sm" id="clearTrail">Limpiar línea del recorrido</button>
       </div>
-    </div>
-  </section>
 
-  <div id="historyBanner"></div>
-  <div id="passagesBanner"></div>
+      <!-- HISTÓRICO: RECORRIDOS -->
+      <div class="panel d-none" id="routesPanel">
+        <div class="panel-title">Recorridos
+          <button type="button" class="info-btn" data-bs-toggle="popover" aria-label="Más información"
+            data-bs-title="¿Qué es una ruta?" data-bs-content="Una ruta es el trayecto que hizo el camión en una sesión, desde que empezó hasta que terminó. En el mapa, A es el inicio y B es el final. Marca las rutas que quieras ver."></button>
+        </div>
 
-  <div id="map"></div>
+        <div class="row g-2">
+          <div class="col-12 col-sm-6 col-lg-12">
+            <label class="field-label" for="historyStart">Desde</label>
+            <input type="datetime-local" class="form-control form-control-sm" id="historyStart">
+          </div>
+          <div class="col-12 col-sm-6 col-lg-12">
+            <label class="field-label" for="historyEnd">Hasta</label>
+            <input type="datetime-local" class="form-control form-control-sm" id="historyEnd">
+          </div>
+        </div>
+        <div class="d-flex gap-2 mt-3">
+          <button class="btn btn-accent btn-sm" id="filterRoutesByDate">Filtrar por fecha</button>
+          <button class="btn btn-quiet btn-sm" id="clearFilter">Quitar filtro</button>
+        </div>
 
-  <section class="stats-card">
-    <div class="stats-card-title">Posición Actual</div>
-    <div class="stats-grid">
-      <div><span class="label">Latitud</span><span class="value" id="lat">--</span></div>
-      <div><span class="label">Longitud</span><span class="value" id="lon">--</span></div>
-      <div><span class="label">Fecha</span><span class="value" id="date">--</span></div>
-      <div><span class="label">Hora</span><span class="value" id="time">--</span></div>
-    </div>
-  </section>
+        <div class="notice d-none" id="historyBanner"></div>
 
+        <div class="mt-4">
+          <table class="table table-sm align-middle routes-table">
+            <thead><tr><th></th><th>Ruta</th><th>Puntos</th></tr></thead>
+            <tbody id="routesTableBody">
+              <tr class="todos-row">
+                <td><input type="checkbox" class="form-check-input" id="routesTodosCheckbox" aria-label="Marcar todas"></td>
+                <td colspan="2">Todas</td>
+              </tr>
+            </tbody>
+          </table>
+          <div class="d-flex align-items-center justify-content-center gap-3 pt-3 muted">
+            <button class="btn btn-quiet btn-sm" id="prevPage" aria-label="Página anterior">‹</button>
+            <span id="pageInfo"></span>
+            <button class="btn btn-quiet btn-sm" id="nextPage" aria-label="Página siguiente">›</button>
+          </div>
+        </div>
+
+        <div class="sim-box d-none" id="simPanel">
+          <div class="panel-title" style="font-size:15px;margin-bottom:12px">Simular recorrido
+            <button type="button" class="info-btn" data-bs-toggle="popover" aria-label="Más información"
+              data-bs-title="Simular recorrido" data-bs-content="Reproduce la ruta como un video: el camión se mueve punto por punto. Arrastra la barra para saltar a otro momento y sube la velocidad si va muy lento."></button>
+          </div>
+          <select class="form-select form-select-sm mb-3" id="simRoute" aria-label="Ruta a simular"></select>
+          <input type="range" class="form-range" id="simSlider" min="0" max="1000" value="0" aria-label="Progreso del recorrido">
+          <div class="muted mb-3" id="simInfo">--</div>
+          <div class="d-flex gap-2 align-items-center">
+            <button class="btn btn-accent btn-sm" id="simPlay">▶ Reproducir</button>
+            <button class="btn btn-quiet btn-sm" id="simReset" aria-label="Volver al inicio">⟲</button>
+            <select class="form-select form-select-sm w-auto ms-auto" id="simSpeed" aria-label="Velocidad">
+              <option value="1">1×</option><option value="2">2×</option><option value="5" selected>5×</option>
+              <option value="10">10×</option><option value="20">20×</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- HISTÓRICO: POR LUGAR -->
+      <div class="panel d-none" id="placePanel">
+        <div class="panel-title">Buscar por lugar
+          <button type="button" class="info-btn" data-bs-toggle="popover" aria-label="Más información"
+            data-bs-title="Buscar por lugar" data-bs-content="Descubre cuándo pasó el camión por un punto. Cada pasada muestra la hora de entrada y de salida de la zona."></button>
+        </div>
+
+        <div class="field-label">1. Ve a un lugar</div>
+        <div class="input-group input-group-sm">
+          <input type="text" class="form-control" id="placeQuery" placeholder="Ej: Cartagena, Bocagrande" aria-label="Buscar lugar">
+          <button class="btn btn-accent" id="placeSearchBtn">Buscar</button>
+        </div>
+        <div class="list-group mt-2" id="placeResults"></div>
+
+        <div class="section-label">2. Marca el punto
+          <button type="button" class="info-btn" data-bs-toggle="popover" aria-label="Más información"
+            data-bs-title="Radio de búsqueda" data-bs-content="Es la distancia alrededor del punto donde se busca al camión: 200 m. Cualquier lectura dentro del círculo azul cuenta como pasada."></button>
+        </div>
+        <div class="muted" id="pickPrompt">Haz clic en el mapa.</div>
+        <div class="point-chip d-none" id="pointChip"></div>
+
+        <div class="d-none" id="placeExtras">
+          <div class="section-label">3. Fechas (opcional)
+            <button type="button" class="info-btn" data-bs-toggle="popover" aria-label="Más información"
+              data-bs-title="Fechas" data-bs-content="Si las dejas vacías se busca en todo el historial. Si pones una, debes poner las dos."></button>
+          </div>
+          <div class="row g-2">
+            <div class="col-12 col-sm-6 col-lg-12">
+              <label class="field-label" for="passStart">Desde</label>
+              <input type="datetime-local" class="form-control form-control-sm" id="passStart">
+            </div>
+            <div class="col-12 col-sm-6 col-lg-12">
+              <label class="field-label" for="passEnd">Hasta</label>
+              <input type="datetime-local" class="form-control form-control-sm" id="passEnd">
+            </div>
+          </div>
+          <div class="d-flex gap-2 mt-3">
+            <button class="btn btn-accent btn-sm" id="searchPassages">Buscar pasadas</button>
+            <button class="btn btn-quiet btn-sm" id="clearPassages">Quitar punto</button>
+          </div>
+        </div>
+
+        <div class="notice d-none" id="passagesBanner"></div>
+      </div>
+    </aside>
+
+    <!-- ============ MAPAS ============ -->
+    <section class="col-12 col-lg-8">
+      <div id="mapWrap">
+        <div id="map" class="map"></div>
+      </div>
+      <div id="placeWrap" class="d-none">
+        <div id="placeMap" class="map"></div>
+      </div>
+
+      <div class="panel mt-3" id="statsCard">
+        <div class="panel-title">Posición actual</div>
+        <div class="row g-3">
+          <div class="col-6 col-md-3"><span class="stat-label">Latitud</span><span class="stat-value" id="lat">--</span></div>
+          <div class="col-6 col-md-3"><span class="stat-label">Longitud</span><span class="stat-value" id="lon">--</span></div>
+          <div class="col-6 col-md-3"><span class="stat-label">Fecha</span><span class="stat-value" id="date">--</span></div>
+          <div class="col-6 col-md-3"><span class="stat-label">Hora</span><span class="stat-value" id="time">--</span></div>
+        </div>
+      </div>
+    </section>
+
+  </div>
 </main>
 
-<div class="modal-overlay" id="appModal">
-  <div class="modal-card">
-    <p id="modalMessage"></p>
-    <button class="btn primary" id="modalOk">Entendido</button>
+<div class="modal fade" id="appModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-sm">
+    <div class="modal-content" style="background:var(--surface);border:1px solid var(--line);border-radius:var(--r)">
+      <div class="modal-body" id="modalMessage"></div>
+      <div class="modal-footer border-0 pt-0"><button class="btn btn-accent w-100" data-bs-dismiss="modal">Entendido</button></div>
+    </div>
   </div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script>
 
-  const map = L.map("map").setView([4.6, -74.08], 13);
+  const $ = (id) => document.getElementById(id);
 
-  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-    maxZoom: 19,
-    attribution: "&copy; OpenStreetMap contributors",
-  }).addTo(map);
+  const PASSAGE_RADIUS_M = 200;
+  const PAGE_SIZE = 5;
+  const SIM_POINTS_PER_SEC = 4; // a velocidad 1×
+  const ROUTE_COLORS = ["#f4a261", "#2ecc71", "#8ecae6", "#e63946", "#ffb703", "#9b5de5", "#00b4d8", "#ff7aa2"];
 
-  // El marcador reutiliza el mismo ícono de camión de la barra de título.
-  const truckIcon = L.divIcon({
-    className: "",
-    html: '<div class="truck-pin">' + document.getElementById("logoIcon").innerHTML + "</div>",
-    iconSize: [40, 40],
-    iconAnchor: [20, 20],
-  });
-  const marker = L.marker([4.6, -74.08], { icon: truckIcon }).addTo(map);
-
-  // Recorrido real del vehículo en tiempo real.
-  const trail = L.polyline([], { color: "#2ecc71", weight: 4, opacity: 0.85 }).addTo(map);
-
-  // Recorridos históricos (uno por cada sesión/recorrido ya guardado).
-  // Cada uno se dibuja con su propio color, y se puede mostrar u ocultar
-  // desde la tabla de recorridos sin perder los datos ya cargados.
-  const ROUTE_COLORS = ["#c2410c", "#2ecc71", "#8ecae6", "#e63946", "#ffb703", "#9b5de5", "#00b4d8", "#f4a261"];
-  const routesLayer = L.layerGroup().addTo(map);
-  const routesBySession = new Map(); // session_id -> { color, points, polyline, startMarker, endMarker, visible }
-
-  // --- Modal de validación (reemplaza los alert() nativos) ---
-  const appModal = document.getElementById("appModal");
-  const modalMessage = document.getElementById("modalMessage");
-  document.getElementById("modalOk").addEventListener("click", () => appModal.classList.remove("open"));
-  function showAlert(message) {
-    modalMessage.textContent = message;
-    appModal.classList.add("open");
+  function addTiles(m) {
+    L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
+      maxZoom: 19, subdomains: "abcd",
+      attribution: "&copy; OpenStreetMap contributors &copy; CARTO",
+    }).addTo(m);
   }
 
+  // ---------- Mapa principal (en vivo + recorridos) ----------
+  const map = L.map("map").setView([4.6, -74.08], 13);
+  addTiles(map);
+
+  const truckSvg = $("logoIcon").innerHTML;
+  const mkIcon = (cls) => L.divIcon({ className: "", html: `<div class="truck-pin ${cls}">${truckSvg}</div>`, iconSize: [40, 40], iconAnchor: [20, 20] });
+  const marker = L.marker([4.6, -74.08], { icon: mkIcon("") }).addTo(map);
+  const trail = L.polyline([], { color: "#2ecc71", weight: 4, opacity: 0.9 }).addTo(map);
+
+  const routesLayer = L.layerGroup().addTo(map);
+  const routesBySession = new Map(); // session_id -> { color, points, polyline, startMarker, endMarker, visible, loaded, loading }
+
+  let view = "live";
+  let lastHistoryView = "routes";
+  let routesLoaded = false;
+  let mapCentered = false;
+  let followTruck = true;
+  let historyMode = false; // true en cualquier vista histórica: ignora el mapa en vivo
+  let sessionsList = [];
+  let currentPage = 0;
+  let currentFilterLabel = null;
+
+  // ---------- Avisos ----------
+  function showAlert(message) {
+    $("modalMessage").textContent = message;
+    bootstrap.Modal.getOrCreateInstance($("appModal")).show();
+  }
+
+  // ---------- Botones "i" ----------
+  document.querySelectorAll(".info-btn").forEach((el) => {
+    el.textContent = "i";
+    new bootstrap.Popover(el, { trigger: "click", placement: "auto" });
+  });
+  document.addEventListener("click", (e) => {
+    if (e.target.closest(".info-btn") || e.target.closest(".popover")) return;
+    document.querySelectorAll(".info-btn").forEach((el) => {
+      const p = bootstrap.Popover.getInstance(el);
+      if (p) p.hide();
+    });
+  });
+
+  // ---------- Fechas ----------
+  function localDatetimeString(date) {
+    const offsetMs = date.getTimezoneOffset() * 60000;
+    return new Date(date.getTime() - offsetMs).toISOString().slice(0, 16);
+  }
+  function updateDateLimits() {
+    const nowStr = localDatetimeString(new Date());
+    ["historyStart", "historyEnd", "passStart", "passEnd"].forEach((id) => { $(id).max = nowStr; });
+  }
+  updateDateLimits();
+  setInterval(updateDateLimits, 30000);
+
+  function validateRange(start, end) {
+    if (!start || !end) { showAlert("Selecciona fecha y hora de inicio y fin."); return false; }
+    const nowStr = localDatetimeString(new Date());
+    if (start > nowStr) { showAlert("La fecha/hora 'Desde' no puede ser futura."); return false; }
+    if (end > nowStr) { showAlert("La fecha/hora 'Hasta' no puede ser futura."); return false; }
+    if (start > end) { showAlert("La fecha/hora 'Desde' no puede ser posterior a 'Hasta'."); return false; }
+    return true;
+  }
+
+  // ---------- Vistas: En vivo / Recorridos / Por lugar ----------
+  function setView(v) {
+    const prev = view;
+    view = v;
+    historyMode = v !== "live";
+    if (historyMode) lastHistoryView = v;
+
+    document.body.dataset.mode = v;
+    $("modeLive").checked = v === "live";
+    $("modeHistory").checked = v !== "live";
+    $("subRoutes").checked = v === "routes";
+    $("subPlace").checked = v === "place";
+    $("subNav").classList.toggle("d-none", v === "live");
+    $("livePanel").classList.toggle("d-none", v !== "live");
+    $("routesPanel").classList.toggle("d-none", v !== "routes");
+    $("placePanel").classList.toggle("d-none", v !== "place");
+    $("mapWrap").classList.toggle("d-none", v === "place");
+    $("statsCard").classList.toggle("d-none", v !== "live");
+    $("placeWrap").classList.toggle("d-none", v !== "place");
+    if (v !== "routes") stopSim();
+
+    if (prev === "live" && v !== "live") {
+      trail.setLatLngs([]);
+      if (map.hasLayer(marker)) map.removeLayer(marker);
+    }
+    if (v === "live" && prev !== "live") leaveHistory();
+
+    if (v === "routes") {
+      if (!routesLoaded) { routesLoaded = true; loadRoutesTable(); }
+      setTimeout(() => map.invalidateSize(), 0);
+    } else if (v === "place") {
+      initPlaceMap();
+      setTimeout(() => placeMap.invalidateSize(), 0);
+    } else {
+      setTimeout(() => map.invalidateSize(), 0);
+    }
+  }
+
+  function leaveHistory() {
+    $("historyStart").value = "";
+    $("historyEnd").value = "";
+    currentFilterLabel = null;
+    routesLoaded = false;
+    clearRoutesTable();
+    updateHistoryViewState();
+    if (!map.hasLayer(marker)) marker.addTo(map);
+    fetch("/api/history")
+      .then((r) => r.json())
+      .then((points) => {
+        trail.setLatLngs(points.map((p) => [p.lat, p.lon]));
+        if (points.length > 0) {
+          const last = points[points.length - 1];
+          marker.setLatLng([last.lat, last.lon]);
+          map.fitBounds(trail.getBounds(), { maxZoom: 15, padding: [20, 20] });
+        }
+      })
+      .catch(() => {});
+  }
+
+  $("modeLive").addEventListener("change", () => setView("live"));
+  $("modeHistory").addEventListener("change", () => setView(lastHistoryView));
+  $("subRoutes").addEventListener("change", () => setView("routes"));
+  $("subPlace").addEventListener("change", () => setView("place"));
+
+  // ---------- Rutas históricas en el mapa ----------
   function endpointIcon(letter, color) {
     return L.divIcon({
       className: "",
       html: `<div class="route-endpoint" style="background:${color}">${letter}</div>`,
-      iconSize: [22, 22],
-      iconAnchor: [11, 11],
+      iconSize: [24, 24], iconAnchor: [12, 12],
     });
   }
 
   function drawRoute(route) {
     const latlngs = route.points.map((p) => [p.lat, p.lon]);
-
     route.polyline = L.polyline(catmullRomSpline(latlngs, 8), {
       color: route.color, weight: 4, opacity: 0.9, smoothFactor: 1.5,
     }).addTo(routesLayer);
@@ -498,11 +500,9 @@
     if (route.points.length > 0) {
       const first = route.points[0];
       const last = route.points[route.points.length - 1];
-
       route.startMarker = L.marker([first.lat, first.lon], { icon: endpointIcon("A", route.color) })
         .bindPopup(`<strong>Inicio</strong><br>${first.time}<br>Lat: ${first.lat.toFixed(5)}, Lon: ${first.lon.toFixed(5)}`)
         .addTo(routesLayer);
-
       route.endMarker = L.marker([last.lat, last.lon], { icon: endpointIcon("B", route.color) })
         .bindPopup(`<strong>Fin</strong><br>${last.time}<br>Lat: ${last.lat.toFixed(5)}, Lon: ${last.lon.toFixed(5)}`)
         .addTo(routesLayer);
@@ -513,35 +513,21 @@
     if (route.polyline) routesLayer.removeLayer(route.polyline);
     if (route.startMarker) routesLayer.removeLayer(route.startMarker);
     if (route.endMarker) routesLayer.removeLayer(route.endMarker);
-    route.polyline = null;
-    route.startMarker = null;
-    route.endMarker = null;
+    route.polyline = route.startMarker = route.endMarker = null;
   }
 
   function setRouteVisible(sessionId, desiredVisible) {
     const route = routesBySession.get(sessionId);
     if (!route) return;
-
-    // route.visible siempre refleja lo que el usuario pidió por último,
-    // aunque los puntos todavía se estén trayendo del servidor.
     route.visible = desiredVisible;
 
-    if (!desiredVisible) {
-      undrawRoute(route);
-      updateHistoryViewState();
-      return;
-    }
-
+    if (!desiredVisible) { undrawRoute(route); updateHistoryViewState(); return; }
     if (route.loaded) {
       if (!route.polyline) drawRoute(route);
       updateHistoryViewState();
       return;
     }
-
-    // Los puntos de cada recorrido se piden recién cuando el usuario lo
-    // marca por primera vez (no al cargar la página), para no traer todo
-    // el histórico de una vez si nadie lo pidió.
-    if (route.loading) return; // ya hay un fetch en curso; él decide al terminar
+    if (route.loading) return;
 
     route.loading = true;
     fetch(`/api/session_route?session_id=${encodeURIComponent(sessionId)}`)
@@ -550,103 +536,156 @@
         route.points = data.points || [];
         route.loaded = true;
         route.loading = false;
-        if (route.visible) drawRoute(route); // pudo haberse desmarcado mientras cargaba
+        if (route.visible) drawRoute(route);
         updateHistoryViewState();
       })
       .catch(() => { route.loading = false; });
   }
 
   function anyRouteVisible() {
-    for (const route of routesBySession.values()) {
-      if (route.visible) return true;
-    }
+    for (const route of routesBySession.values()) if (route.visible) return true;
     return false;
   }
 
   function updateHistoryViewState() {
-    const active = anyRouteVisible();
-    viewingHistory = active;
-
-    // El botón de volver a en vivo aparece si hay recorridos marcados
-    // o si hay un filtro de fecha aplicado (aunque no haya dado resultados).
-    const showBack = active || currentFilterLabel !== null;
-    document.getElementById("backToLive").style.display = showBack ? "inline-block" : "none";
-
-    const banner = document.getElementById("historyBanner");
-    if (routesBySession.size === 0 && currentFilterLabel) {
-      banner.style.display = "block";
+    const banner = $("historyBanner");
+    if (view === "routes" && routesBySession.size === 0 && currentFilterLabel) {
+      banner.classList.remove("d-none");
       banner.textContent = `No hay recorridos guardados entre ${currentFilterLabel}`;
     } else {
-      banner.style.display = "none";
+      banner.classList.add("d-none");
     }
 
-    if (active) {
-      trail.setLatLngs([]); // oculta el trazo en vivo mientras se ven recorridos históricos
-      const visiblePolylines = [...routesBySession.values()]
-        .filter((r) => r.visible && r.polyline)
-        .map((r) => r.polyline);
+    if (anyRouteVisible()) {
+      trail.setLatLngs([]);
+      const visiblePolylines = [...routesBySession.values()].filter((r) => r.visible && r.polyline).map((r) => r.polyline);
       if (visiblePolylines.length > 0) {
         map.fitBounds(L.featureGroup(visiblePolylines).getBounds(), { maxZoom: 15, padding: [20, 20] });
       }
     }
+    refreshSimPanel();
   }
 
-  function backToLiveView() {
-    const hadFilter = currentFilterLabel !== null;
-    document.getElementById("historyStart").value = "";
-    document.getElementById("historyEnd").value = "";
-    currentFilterLabel = null;
+  // ---------- Simulador de recorrido ----------
+  const simMarker = L.marker([0, 0], { icon: mkIcon("sim"), zIndexOffset: 1000 });
+  const simTrail = L.polyline([], { color: "#ffffff", weight: 5, opacity: 0.9 }).addTo(map);
+  const sim = { route: null, id: null, pos: 0, playing: false, last: 0, raf: null };
 
-    if (hadFilter) {
-      loadRoutesTable(); // recarga la tabla completa, sin filtro
-    } else {
-      setAllRoutesVisible(false);
+  function getRouteByKey(key) {
+    for (const [k, r] of routesBySession) if (String(k) === String(key)) return r;
+    return null;
+  }
+
+  function refreshSimPanel() {
+    const list = [...routesBySession.entries()].filter(([, r]) => r.visible && r.loaded && r.points.length > 0);
+    const panel = $("simPanel");
+
+    if (list.length === 0) {
+      panel.classList.add("d-none");
+      stopSim();
+      simTrail.setLatLngs([]);
+      if (map.hasLayer(simMarker)) map.removeLayer(simMarker);
+      sim.route = sim.id = null;
+      return;
     }
 
-    fetch("/api/history")
-      .then((r) => r.json())
-      .then((points) => trail.setLatLngs(points.map((p) => [p.lat, p.lon])));
+    panel.classList.remove("d-none");
+    const select = $("simRoute");
+    select.innerHTML = list.map(([k]) => {
+      const s = sessionsList.find((x) => String(x.session_id) === String(k));
+      return `<option value="${k}">${s ? s.start_time + " → " + s.end_time : k}</option>`;
+    }).join("");
+
+    const keep = list.some(([k]) => String(k) === String(sim.id)) ? String(sim.id) : String(list[0][0]);
+    select.value = keep;
+    if (keep !== String(sim.id)) setSimRoute(keep);
   }
 
-  let mapCentered = false;
-  let followTruck = true;
-  let viewingHistory = false;
+  function setSimRoute(key) {
+    stopSim();
+    sim.id = String(key);
+    sim.route = getRouteByKey(key);
+    sim.pos = 0;
+    if (!map.hasLayer(simMarker)) simMarker.addTo(map);
+    renderSim();
+  }
 
-  const followToggle = document.getElementById("followToggle");
+  function renderSim() {
+    if (!sim.route) return;
+    const pts = sim.route.points;
+    const n = pts.length;
+    const i = Math.min(Math.floor(sim.pos), n - 1);
+    const f = sim.pos - i;
+    const a = pts[i];
+    const b = pts[Math.min(i + 1, n - 1)];
+    const lat = a.lat + (b.lat - a.lat) * f;
+    const lon = a.lon + (b.lon - a.lon) * f;
+
+    simMarker.setLatLng([lat, lon]);
+    simTrail.setLatLngs(pts.slice(0, i + 1).map((p) => [p.lat, p.lon]).concat([[lat, lon]]));
+    $("simSlider").value = n > 1 ? Math.round((sim.pos / (n - 1)) * 1000) : 0;
+    $("simInfo").textContent = `${a.time} · punto ${i + 1} de ${n}`;
+    if (!map.getBounds().contains([lat, lon])) map.panTo([lat, lon]);
+  }
+
+  function simTick(ts) {
+    if (!sim.playing) return;
+    const dt = (ts - sim.last) / 1000;
+    sim.last = ts;
+    sim.pos += dt * SIM_POINTS_PER_SEC * Number($("simSpeed").value);
+    const end = sim.route.points.length - 1;
+    if (sim.pos >= end) { sim.pos = end; renderSim(); stopSim(); return; }
+    renderSim();
+    sim.raf = requestAnimationFrame(simTick);
+  }
+
+  function startSim() {
+    if (!sim.route) return;
+    if (sim.pos >= sim.route.points.length - 1) sim.pos = 0;
+    sim.playing = true;
+    sim.last = performance.now();
+    $("simPlay").textContent = "⏸ Pausar";
+    sim.raf = requestAnimationFrame(simTick);
+  }
+
+  function stopSim() {
+    sim.playing = false;
+    if (sim.raf) cancelAnimationFrame(sim.raf);
+    sim.raf = null;
+    $("simPlay").textContent = "▶ Reproducir";
+  }
+
+  $("simPlay").addEventListener("click", () => (sim.playing ? stopSim() : startSim()));
+  $("simReset").addEventListener("click", () => { stopSim(); sim.pos = 0; renderSim(); });
+  $("simRoute").addEventListener("change", (e) => setSimRoute(e.target.value));
+  $("simSlider").addEventListener("input", (e) => {
+    if (!sim.route) return;
+    sim.pos = (Number(e.target.value) / 1000) * (sim.route.points.length - 1);
+    renderSim();
+  });
+
+  // ---------- En vivo ----------
+  const followToggle = $("followToggle");
   followToggle.addEventListener("change", () => {
     followTruck = followToggle.checked;
-
-    if (followTruck) {
-      map.panTo(marker.getLatLng());
-    }
+    if (followTruck && !historyMode) map.panTo(marker.getLatLng());
   });
-
-  map.on("dragstart", () => {
-    followTruck = false;
-    followToggle.checked = false;
-  });
-
-  document.getElementById("clearTrail").addEventListener("click", () => {
-    trail.setLatLngs([]);
-  });
+  map.on("dragstart", () => { followTruck = false; followToggle.checked = false; });
+  $("clearTrail").addEventListener("click", () => trail.setLatLngs([]));
 
   function updateFields(data) {
-    document.getElementById("lat").textContent  = data.lat  !== null ? data.lat  : "--";
-    document.getElementById("lon").textContent  = data.lon  !== null ? data.lon  : "--";
-    document.getElementById("date").textContent = data.date !== null ? data.date : "--";
-    document.getElementById("time").textContent = data.time !== null ? data.time : "--";
-    document.getElementById("status").textContent = "Live — last update " + new Date().toLocaleTimeString();
-    document.getElementById("dot").classList.add("live");
+    $("lat").textContent = data.lat !== null ? data.lat : "--";
+    $("lon").textContent = data.lon !== null ? data.lon : "--";
+    $("date").textContent = data.date !== null ? data.date : "--";
+    $("time").textContent = data.time !== null ? data.time : "--";
+    $("status").textContent = "En vivo — última actualización " + new Date().toLocaleTimeString();
+    $("dot").classList.add("live");
   }
 
   function updateMap(lat, lon, addToTrail = true) {
     const point = [lat, lon];
     marker.setLatLng(point);
-
-    if (addToTrail) {
-      trail.addLatLng(point);
-    }
-
+    if (addToTrail) trail.addLatLng(point);
     if (!mapCentered) {
       map.setView(point, 15);
       mapCentered = true;
@@ -655,8 +694,7 @@
     }
   }
 
-  // Suavizado tipo Catmull-Rom: convierte puntos "en zigzag" (ruido normal
-  // del GPS) en una curva más natural. Corre en el navegador del usuario.
+  // Suavizado Catmull-Rom para que el GPS "en zigzag" se vea como curva natural.
   function catmullRomSpline(points, segments = 8) {
     if (points.length < 3) return points;
     const result = [];
@@ -665,7 +703,6 @@
       const p1 = points[i];
       const p2 = points[i + 1];
       const p3 = points[i + 2 < points.length ? i + 2 : i + 1];
-
       for (let t = 0; t < segments; t++) {
         const st = t / segments, st2 = st * st, st3 = st2 * st;
         const lat = 0.5 * (2 * p1[0] + (-p0[0] + p2[0]) * st +
@@ -681,65 +718,9 @@
     return result;
   }
 
-  // --- Calendario bloqueado: nunca se puede elegir una fecha/hora futura ---
-  // (aplica al filtro de fecha de la tabla de recorridos históricos;
-  // la búsqueda "por lugar" no usa fecha, ver más abajo)
-
-  function localDatetimeString(date) {
-    const offsetMs = date.getTimezoneOffset() * 60000;
-    return new Date(date.getTime() - offsetMs).toISOString().slice(0, 16);
-  }
-
-  function updateDateLimits() {
-    const nowStr = localDatetimeString(new Date());
-    document.getElementById("historyStart").max = nowStr;
-    document.getElementById("historyEnd").max = nowStr;
-  }
-  updateDateLimits();
-  setInterval(updateDateLimits, 30000);
-
-  // --- Validación del rango de fecha/hora elegido, con popup en vez de alert() nativo ---
-
-  function validateRange(start, end) {
-    if (!start || !end) {
-      showAlert("Selecciona fecha y hora de inicio y fin.");
-      return false;
-    }
-
-    const nowStr = localDatetimeString(new Date());
-    if (start > nowStr) {
-      showAlert("La fecha/hora 'Desde' no puede ser futura.");
-      return false;
-    }
-    if (end > nowStr) {
-      showAlert("La fecha/hora 'Hasta' no puede ser futura.");
-      return false;
-    }
-    if (start > end) {
-      showAlert("La fecha/hora 'Desde' no puede ser posterior a 'Hasta'.");
-      return false;
-    }
-    return true;
-  }
-
-  document.getElementById("backToLive").addEventListener("click", backToLiveView);
-
-  // --- Tabla de recorridos: un checkbox por recorrido guardado + "Todos" ---
-
-  const todosCheckbox = document.getElementById("routesTodosCheckbox");
-  const routesTableBody = document.getElementById("routesTableBody");
-  const toggleRoutesTableBtn = document.getElementById("toggleRoutesTable");
-  const routesTablePanel = document.getElementById("routesTablePanel");
-
-  toggleRoutesTableBtn.addEventListener("click", () => {
-    const isOpen = routesTablePanel.classList.toggle("open");
-    toggleRoutesTableBtn.textContent = isOpen ? "Ocultar tabla de recorridos" : "Ver tabla de recorridos";
-  });
-
-  const PAGE_SIZE = 5;
-  let sessionsList = [];
-  let currentPage = 0;
-  let currentFilterLabel = null; // ej. "2026-09-20 08:00 → 2026-09-25 20:00", o null si no hay filtro
+  // ---------- Tabla de recorridos ----------
+  const todosCheckbox = $("routesTodosCheckbox");
+  const routesTableBody = $("routesTableBody");
 
   function setAllRoutesVisible(visible) {
     routesBySession.forEach((_, sessionId) => setRouteVisible(sessionId, visible));
@@ -763,10 +744,9 @@
       const row = document.createElement("tr");
       row.dataset.sessionId = s.session_id;
       row.innerHTML = `
-        <td><input type="checkbox"${route.visible ? " checked" : ""}></td>
+        <td><input type="checkbox" class="form-check-input"${route.visible ? " checked" : ""}></td>
         <td><span class="route-swatch" style="background:${route.color}"></span>${s.start_time} → ${s.end_time}</td>
-        <td>${s.points}</td>
-      `;
+        <td>${s.points}</td>`;
       row.querySelector("input").addEventListener("change", (e) => {
         setRouteVisible(s.session_id, e.target.checked);
         syncTodosCheckbox();
@@ -774,19 +754,15 @@
       routesTableBody.appendChild(row);
     });
 
-    document.getElementById("pageInfo").textContent =
-      sessionsList.length === 0 ? "Sin recorridos" : `Página ${currentPage + 1} de ${totalPages}`;
-    document.getElementById("prevPage").disabled = currentPage === 0;
-    document.getElementById("nextPage").disabled = currentPage >= totalPages - 1;
+    $("pageInfo").textContent = sessionsList.length === 0 ? "Sin recorridos" : `Página ${currentPage + 1} de ${totalPages}`;
+    $("prevPage").disabled = currentPage === 0;
+    $("nextPage").disabled = currentPage >= totalPages - 1;
     syncTodosCheckbox();
   }
 
-  document.getElementById("prevPage").addEventListener("click", () => { currentPage--; renderRoutesPage(); });
-  document.getElementById("nextPage").addEventListener("click", () => { currentPage++; renderRoutesPage(); });
-
-  todosCheckbox.addEventListener("change", () => {
-    setAllRoutesVisible(todosCheckbox.checked);
-  });
+  $("prevPage").addEventListener("click", () => { currentPage--; renderRoutesPage(); });
+  $("nextPage").addEventListener("click", () => { currentPage++; renderRoutesPage(); });
+  todosCheckbox.addEventListener("change", () => setAllRoutesVisible(todosCheckbox.checked));
 
   function clearRoutesTable() {
     routesBySession.forEach((route) => undrawRoute(route));
@@ -796,25 +772,18 @@
     todosCheckbox.checked = false;
   }
 
-  // Al cargar la página (o al limpiar el filtro) solo se puebla la tabla,
-  // sin dibujar nada en el mapa: se entra siempre en vivo. Solo cuando el
-  // usuario filtra por fecha (una búsqueda explícita) se muestran de una
-  // vez los recorridos encontrados.
+  // Al entrar a Recorridos solo se llena la tabla; al filtrar por fecha se muestran las rutas encontradas.
   function loadRoutesTable(start, end) {
     clearRoutesTable();
     const autoShow = Boolean(start && end);
-
     let url = "/api/sessions";
-    if (autoShow) {
-      url += `?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`;
-    }
+    if (autoShow) url += `?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`;
 
     fetch(url)
       .then((r) => r.json())
       .then((data) => {
         if (data.error) { showAlert(data.error); return; }
         sessionsList = data.sessions || [];
-
         sessionsList.forEach((s, i) => {
           routesBySession.set(s.session_id, {
             color: ROUTE_COLORS[i % ROUTE_COLORS.length],
@@ -822,166 +791,204 @@
             visible: false, loaded: false, loading: false,
           });
         });
-
-        if (autoShow) {
-          sessionsList.forEach((s) => setRouteVisible(s.session_id, true));
-        }
+        if (autoShow) sessionsList.forEach((s) => setRouteVisible(s.session_id, true));
         renderRoutesPage();
         updateHistoryViewState();
       })
       .catch(() => showAlert("Error cargando la tabla de recorridos"));
   }
-  loadRoutesTable();
 
-  // --- Filtro por fecha de la tabla de recorridos históricos ---
-
-  document.getElementById("filterRoutesByDate").addEventListener("click", () => {
-    const start = document.getElementById("historyStart").value;
-    const end = document.getElementById("historyEnd").value;
-
+  $("filterRoutesByDate").addEventListener("click", () => {
+    const start = $("historyStart").value;
+    const end = $("historyEnd").value;
     if (!validateRange(start, end)) return;
-
     currentFilterLabel = `${start.replace("T", " ")} → ${end.replace("T", " ")}`;
     loadRoutesTable(start, end);
-
-    routesTablePanel.classList.add("open");
-    toggleRoutesTableBtn.textContent = "Ocultar tabla de recorridos";
   });
 
-  // 1) Cargar el historial para dibujar el recorrido ya hecho antes de conectarnos en vivo.
+  $("clearFilter").addEventListener("click", () => {
+    $("historyStart").value = "";
+    $("historyEnd").value = "";
+    currentFilterLabel = null;
+    loadRoutesTable();
+  });
+
+  // ---------- Carga inicial en vivo ----------
   fetch("/api/history")
     .then((r) => r.json())
     .then((points) => {
+      if (historyMode) return;
       const latlngs = points.map((p) => [p.lat, p.lon]);
       trail.setLatLngs(latlngs);
       if (latlngs.length > 0) {
-        const last = latlngs[latlngs.length - 1];
-        marker.setLatLng(last);
+        marker.setLatLng(latlngs[latlngs.length - 1]);
         map.fitBounds(trail.getBounds(), { maxZoom: 15, padding: [20, 20] });
         mapCentered = true;
       }
     })
     .catch(() => {});
 
-  // 2) Traer el último dato conocido para los campos de texto.
   fetch("/api/latest")
     .then((r) => r.json())
     .then((data) => {
       updateFields(data);
-      if (data.lat !== null && data.lon !== null) {
-        // No lo volvemos a añadir al trail: ya vino incluido en /api/history.
-        updateMap(data.lat, data.lon, false);
-      }
+      if (data.lat !== null && data.lon !== null) updateMap(data.lat, data.lon, false);
     })
     .catch(() => {});
 
-  // 3) Suscribirse a las actualizaciones en vivo (Server-Sent Events) y extender el recorrido.
   const source = new EventSource("/events");
 
   source.onmessage = (event) => {
     const data = JSON.parse(event.data);
 
-    // El writer empezó una sesión/recorrido nuevo: borramos el trazo sin recargar.
     if (data.type === "session_start") {
-      trail.setLatLngs([]);
-      mapCentered = false;
-      document.getElementById("status").textContent = "Nueva sesión de recorrido iniciada";
+      if (!historyMode) {
+        trail.setLatLngs([]);
+        mapCentered = false;
+      }
+      $("status").textContent = "Nueva sesión de recorrido iniciada";
       return;
     }
 
     updateFields(data);
-    if (data.lat !== null && data.lon !== null && !viewingHistory) {
-      updateMap(data.lat, data.lon, true);
-    }
+    if (data.lat !== null && data.lon !== null && !historyMode) updateMap(data.lat, data.lon, true);
   };
 
   source.onerror = () => {
-    document.getElementById("dot").classList.remove("live");
-    document.getElementById("status").textContent = "Connection lost — retrying…";
+    $("dot").classList.remove("live");
+    $("status").textContent = "Conexión perdida — reintentando…";
   };
 
-  // --- Búsqueda de "pasadas" por un lugar elegido en el mapa ---
-
-  const PASSAGE_RADIUS_M = 100;
-
-  let pickingLocation = false;
+  // ---------- Buscar por lugar (mapa propio) ----------
+  let placeMap = null;
   let placeMarker = null;
   let placeCircle = null;
-  const passageMarkersLayer = L.layerGroup().addTo(map);
+  let passageLayer = null;
+  let passageMarkers = [];
+  const placeIcon = L.divIcon({ className: "", html: '<div class="place-pin"></div>', iconSize: [20, 20], iconAnchor: [10, 10] });
 
-  document.getElementById("pickLocationBtn").addEventListener("click", () => {
-    pickingLocation = true;
-    document.getElementById("status").textContent = "Haz clic en el mapa para elegir el punto…";
-  });
+  function initPlaceMap() {
+    if (placeMap) return;
+    placeMap = L.map("placeMap").setView(map.getCenter(), 14);
+    addTiles(placeMap);
+    passageLayer = L.layerGroup().addTo(placeMap);
+    placeMap.on("click", (e) => setPlacePoint(e.latlng.lat, e.latlng.lng)); // un clic basta para marcar el punto
+  }
 
-  map.on("click", (e) => {
-    if (!pickingLocation) return;
-    pickingLocation = false;
+  function setPlacePoint(lat, lng) {
+    if (placeMarker) placeMap.removeLayer(placeMarker);
+    if (placeCircle) placeMap.removeLayer(placeCircle);
+    placeMarker = L.marker([lat, lng], { icon: placeIcon }).addTo(placeMap);
+    placeCircle = L.circle([lat, lng], { radius: PASSAGE_RADIUS_M, color: "#8ecae6", weight: 2, fillOpacity: 0.12 }).addTo(placeMap);
+    $("pickPrompt").classList.add("d-none");
+    $("pointChip").classList.remove("d-none");
+    $("pointChip").textContent = `${lat.toFixed(5)}, ${lng.toFixed(5)} · radio ${PASSAGE_RADIUS_M} m`;
+    $("placeExtras").classList.remove("d-none");
+  }
 
-    const { lat, lng } = e.latlng;
+  // 1) Buscar un lugar por nombre (Nominatim / OpenStreetMap) y llevar el mapa hasta allá.
+  function searchPlace() {
+    const q = $("placeQuery").value.trim();
+    const results = $("placeResults");
+    if (!q) { showAlert("Escribe el nombre de un lugar, por ejemplo: Cartagena."); return; }
 
-    if (placeMarker) map.removeLayer(placeMarker);
-    if (placeCircle) map.removeLayer(placeCircle);
+    results.innerHTML = '<div class="muted">Buscando…</div>';
+    fetch("https://nominatim.openstreetmap.org/search?format=jsonv2&limit=5&accept-language=es&countrycodes=co&q=" + encodeURIComponent(q))
+      .then((r) => r.json())
+      .then((items) => {
+        results.innerHTML = "";
+        if (items.length === 0) {
+          results.innerHTML = '<div class="muted">No encontramos ese lugar. Prueba con otro nombre.</div>';
+          return;
+        }
+        items.forEach((it) => {
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = "list-group-item list-group-item-action place-result";
+          btn.textContent = it.display_name;
+          btn.addEventListener("click", () => {
+            const lat = parseFloat(it.lat), lon = parseFloat(it.lon);
+            placeMap.flyTo([lat, lon], 15);
+            setPlacePoint(lat, lon);
+            results.innerHTML = "";
+          });
+          results.appendChild(btn);
+        });
+      })
+      .catch(() => {
+        results.innerHTML = "";
+        showAlert("No se pudo buscar el lugar. Revisa tu conexión e intenta de nuevo.");
+      });
+  }
+  $("placeSearchBtn").addEventListener("click", searchPlace);
+  $("placeQuery").addEventListener("keydown", (e) => { if (e.key === "Enter") searchPlace(); });
 
-    placeMarker = L.marker([lat, lng]).addTo(map);
-    placeCircle = L.circle([lat, lng], { radius: PASSAGE_RADIUS_M, color: "#8ecae6", fillOpacity: 0.08 }).addTo(map);
+  // 3) Buscar pasadas (fechas opcionales).
+  $("searchPassages").addEventListener("click", () => {
+    if (!placeMarker) { showAlert("Primero marca un punto en el mapa."); return; }
 
-    document.getElementById("status").textContent = `Punto seleccionado: ${lat.toFixed(5)}, ${lng.toFixed(5)}`;
-  });
-
-  document.getElementById("searchPassages").addEventListener("click", () => {
-    if (!placeMarker) {
-      showAlert("Primero selecciona un punto en el mapa");
-      return;
+    const start = $("passStart").value;
+    const end = $("passEnd").value;
+    let dateParams = "";
+    if (start || end) {
+      if (!validateRange(start, end)) return;
+      dateParams = `&start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`;
     }
 
     const { lat, lng } = placeMarker.getLatLng();
-    const banner = document.getElementById("passagesBanner");
+    const banner = $("passagesBanner");
 
-    // Búsqueda por lugar: siempre sobre todo el histórico, sin filtro de fecha.
-    const url = `/api/passages?lat=${lat}&lon=${lng}&radius=${PASSAGE_RADIUS_M}`;
-
-    fetch(url)
+    fetch(`/api/passages?lat=${lat}&lon=${lng}&radius=${PASSAGE_RADIUS_M}${dateParams}`)
       .then((r) => r.json())
       .then((data) => {
-        if (data.error) {
-          showAlert(data.error);
-          return;
-        }
+        if (data.error) { showAlert(data.error); return; }
 
-        passageMarkersLayer.clearLayers();
+        passageLayer.clearLayers();
+        passageMarkers = [];
 
         if (data.passages.length === 0) {
-          banner.style.display = "block";
-          banner.innerHTML = "El camión no ha pasado por ese punto en el rango consultado.";
+          banner.textContent = "El camión no pasó por ese punto" + (dateParams ? " en las fechas elegidas." : ".");
         } else {
-          const items = data.passages.map((p) => {
-            L.circleMarker([p.lat, p.lon], { radius: 6, color: "#f4a261", fillOpacity: 0.9 })
-              .bindPopup(`${p.start_gps_time} — ${p.end_gps_time}`)
-              .addTo(passageMarkersLayer);
-
-            return p.start_received_at === p.end_received_at
-              ? `<li>${p.start_received_at} (${p.points_count} lectura${p.points_count > 1 ? "s" : ""})</li>`
-              : `<li>${p.start_received_at} → ${p.end_received_at} (${p.points_count} lecturas)</li>`;
+          const items = data.passages.map((p, i) => {
+            passageMarkers.push(
+              L.circleMarker([p.lat, p.lon], { radius: 7, color: "#f4a261", fillColor: "#f4a261", fillOpacity: 0.9 })
+                .bindPopup(`${p.start_gps_time} — ${p.end_gps_time}`)
+                .addTo(passageLayer)
+            );
+            const label = p.start_received_at === p.end_received_at
+              ? `${p.start_received_at} (${p.points_count} lectura${p.points_count > 1 ? "s" : ""})`
+              : `${p.start_received_at} → ${p.end_received_at} (${p.points_count} lecturas)`;
+            return `<li><button type="button" class="pass-item" data-i="${i}">${label}</button></li>`;
           }).join("");
-
-          banner.style.display = "block";
-          banner.innerHTML = `<strong>${data.passages.length} pasada(s) encontrada(s):</strong><ul>${items}</ul>`;
+          banner.innerHTML = `<div class="fw-bold mb-2">${data.passages.length} pasada(s) encontrada(s)</div><ul class="list-unstyled m-0">${items}</ul>`;
+          banner.querySelectorAll(".pass-item").forEach((b) => b.addEventListener("click", () => {
+            const m = passageMarkers[Number(b.dataset.i)];
+            placeMap.flyTo(m.getLatLng(), 17);
+            m.openPopup();
+          }));
         }
 
-        document.getElementById("clearPassages").style.display = "inline-block";
+        banner.classList.remove("d-none");
+        placeMap.fitBounds(placeCircle.getBounds(), { maxZoom: 16, padding: [20, 20] });
       })
       .catch(() => showAlert("Error consultando las pasadas por ese punto"));
   });
 
-  document.getElementById("clearPassages").addEventListener("click", () => {
-    passageMarkersLayer.clearLayers();
-    document.getElementById("passagesBanner").style.display = "none";
-    document.getElementById("clearPassages").style.display = "none";
-
-    if (placeMarker) { map.removeLayer(placeMarker); placeMarker = null; }
-    if (placeCircle) { map.removeLayer(placeCircle); placeCircle = null; }
+  $("clearPassages").addEventListener("click", () => {
+    if (passageLayer) passageLayer.clearLayers();
+    passageMarkers = [];
+    if (placeMarker) { placeMap.removeLayer(placeMarker); placeMarker = null; }
+    if (placeCircle) { placeMap.removeLayer(placeCircle); placeCircle = null; }
+    $("passagesBanner").classList.add("d-none");
+    $("placeExtras").classList.add("d-none");
+    $("pointChip").classList.add("d-none");
+    $("pickPrompt").classList.remove("d-none");
+    $("passStart").value = "";
+    $("passEnd").value = "";
+    $("placeResults").innerHTML = "";
   });
+
+  setView("live");
 </script>
 
 </body>

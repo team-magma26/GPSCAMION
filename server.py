@@ -1,5 +1,6 @@
 import argparse
 import json
+import math
 import os
 import queue
 import socket
@@ -108,9 +109,14 @@ def init_db():
     cur.execute(
         "CREATE INDEX IF NOT EXISTS idx_locations_acc_received ON locations (account_id, received_at)"
     )
-  
+
     cur.execute(
         "CREATE INDEX IF NOT EXISTS idx_locations_acc_gpstime ON locations (account_id, gps_time)"
+    )
+
+    # Acelera la búsqueda "¿tiene historial cerca de este lugar?" (/api/has_history)
+    cur.execute(
+        "CREATE INDEX IF NOT EXISTS idx_locations_acc_latlon ON locations (account_id, lat, lon)"
     )
     cur.execute(
         """
@@ -390,8 +396,8 @@ def get_passages_near(target_lat: float, target_lon: float, radius_m: float,
     params += [radius_m, max_points]
 
     query = f"""
-        SELECT lat, lon, gps_time, received_at, session_id, distance_m FROM (
-            SELECT lat, lon, gps_time, received_at, session_id,
+        SELECT lat, lon, gps_time, received_at, distance_m FROM (
+            SELECT lat, lon, gps_time, received_at,
                 6371000 * acos(
                     LEAST(1.0, GREATEST(-1.0,
                         cos(radians(%s)) * cos(radians(lat)) * cos(radians(lon) - radians(%s)) +
@@ -419,28 +425,62 @@ def get_passages_near(target_lat: float, target_lon: float, radius_m: float,
     return rows, sql_text
 
 
+def has_history_near(target_lat: float, target_lon: float, radius_m: float) -> bool:
+    """True si ACCOUNT_ID tiene al menos un punto dentro de radius_m metros.
+    Primero filtra por un rectángulo aproximado de lat/lon (barato) y solo
+    entonces calcula Haversine; se detiene en el primer punto que encuentra."""
+    dlat = radius_m / 111320.0
+    cos_lat = max(math.cos(math.radians(target_lat)), 0.01)
+    dlon = radius_m / (111320.0 * cos_lat)
+
+    query = """
+        SELECT 1 FROM locations
+        WHERE account_id = %s
+          AND lat BETWEEN %s AND %s
+          AND lon BETWEEN %s AND %s
+          AND 6371000 * acos(
+                LEAST(1.0, GREATEST(-1.0,
+                    cos(radians(%s)) * cos(radians(lat)) * cos(radians(lon) - radians(%s)) +
+                    sin(radians(%s)) * sin(radians(lat))
+                ))
+              ) <= %s
+        LIMIT 1
+    """
+    params = (
+        ACCOUNT_ID,
+        target_lat - dlat, target_lat + dlat,
+        target_lon - dlon, target_lon + dlon,
+        target_lat, target_lon, target_lat,
+        radius_m,
+    )
+
+    with db_lock:
+        conn = get_connection()
+        cur = conn.cursor()
+        cur.execute(query, params)
+        row = cur.fetchone()
+        cur.close()
+        conn.close()
+    return row is not None
+
+
 def group_passages(rows, gap_seconds: int = PASSAGE_GAP_SECONDS):
-    """Agrupa filas (lat, lon, gps_time, received_at, session_id, distance_m)
-    ordenadas por gps_time en "pasadas": si el camión estuvo cerca del punto
-    en varias lecturas seguidas (menos de gap_seconds entre una y otra,
-    medido con la hora real del GPS), se reporta como una sola pasada con su
-    hora de entrada y de salida, en vez de listar cada lectura individual.
+    """Agrupa filas (lat, lon, gps_time, received_at, distance_m) ordenadas
+    por gps_time en "pasadas": si el camión estuvo cerca del punto en varias
+    lecturas seguidas (menos de gap_seconds entre una y otra, medido con la
+    hora real del GPS), se reporta como una sola pasada con su hora de
+    entrada y de salida, en vez de listar cada lectura individual.
     received_at se conserva en cada pasada solo como referencia de cuándo
-    llegó ese dato al servidor. session_id queda fijado al de la primera
-    lectura del grupo (en la práctica una misma pasada no cruza de sesión,
-    porque el hueco que abre una sesión nueva -SESSION_GAP_SECONDS- es más
-    corto que el que separa dos pasadas -PASSAGE_GAP_SECONDS-); se usa para
-    que el frontend pueda ocultar la pasada cuando su recorrido/sesión se
-    desmarca en la tabla de recorridos."""
+    llegó ese dato al servidor."""
     passages = []
     current = None
     prev_dt = None
 
-    for lat, lon, gps_time, received_at, session_id, distance_m in rows:
+    for lat, lon, gps_time, received_at, distance_m in rows:
         try:
             gps_dt = datetime.strptime(gps_time, "%Y-%m-%d %H:%M:%S")
         except ValueError:
-        
+
             print(f"[WARN] gps_time con formato inesperado, se omite: {gps_time!r}")
             continue
 
@@ -452,7 +492,6 @@ def group_passages(rows, gap_seconds: int = PASSAGE_GAP_SECONDS):
                 "end_gps_time": gps_time,
                 "start_received_at": received_at,
                 "end_received_at": received_at,
-                "session_id": session_id,
                 "lat": lat,
                 "lon": lon,
                 "points_count": 1,
@@ -499,7 +538,7 @@ def parse_message(raw: str):
     lat = float(fields["Lat"])
     lon = float(fields["Lon"])
     gps_time = fields["Time"]
-   
+
     datetime.strptime(gps_time, "%Y-%m-%d %H:%M:%S")
     return lat, lon, gps_time
 
@@ -690,6 +729,26 @@ def api_passages():
     if debug:
         response["sql"] = sql_text
     return jsonify(response)
+
+
+@app.route("/api/has_history")
+def api_has_history():
+    """Responde si el camión tiene historial cerca de un punto (para mostrar
+    "Con historial" / "Sin historial" en la búsqueda por lugar).
+    Parámetros (query string):
+      lat, lon = coordenadas del punto (obligatorios)
+      radius   = radio en metros (opcional, default 200, máximo 50000)
+    """
+    try:
+        target_lat = float(request.args.get("lat", ""))
+        target_lon = float(request.args.get("lon", ""))
+    except ValueError:
+        return jsonify({"error": "'lat' y 'lon' son obligatorios y deben ser numéricos"}), 400
+
+    radius_m = request.args.get("radius", default=200, type=float)
+    radius_m = min(max(radius_m, 1), 50000)
+
+    return jsonify({"has_history": has_history_near(target_lat, target_lon, radius_m)})
 
 
 @app.route("/events")

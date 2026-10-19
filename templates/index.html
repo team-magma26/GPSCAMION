@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>{{ app_name }} — Live</title>
-<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns=%22http://www.w3.org/2000/svg%22%20viewBox=%220%200%2032%2032%22%3E%3Cdefs%3E%3ClinearGradient%20id=%22g%22%20x1=%220%22%20y1=%220%22%20x2=%221%22%20y2=%221%22%3E%3Cstop%20offset=%220%22%20stop-color=%22%23a8dcf0%22/%3E%3Cstop%20offset=%221%22%20stop-color=%22%235aa9d6%22/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect%20width=%2232%22%20height=%2232%22%20rx=%228%22%20fill=%22url%28%23g%29%22/%3E%3Cg%20transform=%22translate%284%204%29%22%20fill=%22none%22%20stroke=%22%230d1b2a%22%20stroke-width=%221.9%22%20stroke-linecap=%22round%22%20stroke-linejoin=%22round%22%3E%3Cpath%20d=%22M1%206h13v10H1z%22/%3E%3Cpath%20d=%22M14%209h4l3%203v4h-7z%22/%3E%3Ccircle%20cx=%226%22%20cy=%2218%22%20r=%222%22/%3E%3Ccircle%20cx=%2217%22%20cy=%2218%22%20r=%222%22/%3E%3C/g%3E%3C/svg%3E">
+<title>OnRoute — En vivo</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns=%22http://www.w3.org/2000/svg%22%20viewBox=%220%200%2032%2032%22%3E%3Cdefs%3E%3ClinearGradient%20id=%22g%22%20x1=%220%22%20y1=%220%22%20x2=%221%22%20y2=%221%22%3E%3Cstop%20offset=%220%22%20stop-color=%22%23a8dcf0%22/%3E%3Cstop%20offset=%221%22%20stop-color=%22%235aa9d6%22/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect%20width=%2232%22%20height=%2232%22%20rx=%228%22%20fill=%22url%28%23g%29%22/%3E%3Csvg%20x=%223%22%20y=%223%22%20width=%2226%22%20height=%2226%22%20viewBox=%222%201.5%2020.5%2020.5%22%20fill=%22none%22%20stroke=%22%230d1b2a%22%20stroke-width=%222.3%22%20stroke-linecap=%22round%22%20stroke-linejoin=%22round%22%20color=%22%230d1b2a%22%3E%3Cpath%20d=%22M16%203.2a4.6%204.6%200%200%200-4.6%204.6c0%203.3%204.6%207.6%204.6%207.6s4.6-4.3%204.6-7.6A4.6%204.6%200%200%200%2016%203.2z%22/%3E%3Ccircle%20cx=%2216%22%20cy=%227.8%22%20r=%221.5%22%20fill=%22currentColor%22/%3E%3Cpath%20d=%22M4.5%2020.5c3.5%200%203-5%207.5-5%22%20stroke-dasharray=%220.1%202.8%22/%3E%3Ccircle%20cx=%224.5%22%20cy=%2220.5%22%20r=%221.6%22%20fill=%22currentColor%22%20stroke=%22none%22/%3E%3C/svg%3E%3C/svg%3E">
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -389,6 +389,10 @@
   }
   .map-alert svg { flex-shrink: 0; width: 20px; height: 20px; color: #ffd8b0; margin-top: 1px; }
   .map-alert b { display: block; font-size: 15px; }
+  /* Logo de OnRoute: el pin necesita un poco más de tamaño que el camión anterior */
+  .logo svg { width: 36px; height: 36px; }
+  @media (max-width: 991px) { .logo svg { width: 29px; height: 29px; } }
+
   /* En computador va arriba (junto al zoom) para que se vea sin hacer scroll; en celular queda abajo */
   @media (min-width: 992px) {
     .map-alert { top: 12px; bottom: auto; left: 58px; transform: none; width: min(560px, calc(100% - 270px)); }
@@ -400,13 +404,13 @@
 <header class="topbar">
   <div class="container-fluid px-3 px-lg-4 py-3 d-flex align-items-center flex-wrap gap-3">
     <div class="logo" id="logoIcon">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M1 6h13v10H1z"/><path d="M14 9h4l3 3v4h-7z"/><circle cx="6" cy="18" r="2"/><circle cx="17" cy="18" r="2"/>
+      <svg viewBox="2 1.5 20.5 20.5" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M16 3.2a4.6 4.6 0 0 0-4.6 4.6c0 3.3 4.6 7.6 4.6 7.6s4.6-4.3 4.6-7.6A4.6 4.6 0 0 0 16 3.2z"/><circle cx="16" cy="7.8" r="1.5" fill="currentColor"/><path d="M4.5 20.5c3.5 0 3-5 7.5-5" stroke-dasharray="0.1 2.8"/><circle cx="4.5" cy="20.5" r="1.6" fill="currentColor" stroke="none"/>
       </svg>
     </div>
     <div class="flex-grow-1 brand">
-      <h1>Rastreador de camión</h1>
-      <span class="app-sub">{{ app_name }}</span>
+      <h1>OnRoute</h1>
+      <span class="app-sub">Rastreo GPS en tiempo real</span>
     </div>
     <button type="button" class="btn btn-quiet btn-sm d-lg-none" id="topToggle" aria-expanded="false" aria-label="Mostrar u ocultar opciones">
       <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
@@ -670,7 +674,8 @@
   const map = L.map("map").setView([4.6, -74.08], 13);
   addTiles(map);
 
-  const truckSvg = $("logoIcon").innerHTML;
+  // Ícono del vehículo en el mapa (independiente del logo de la app)
+  const truckSvg = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 6h13v10H1z"/><path d="M14 9h4l3 3v4h-7z"/><circle cx="6" cy="18" r="2"/><circle cx="17" cy="18" r="2"/></svg>';
   const mkIcon = (cls) => L.divIcon({ className: "", html: `<div class="truck-pin ${cls}">${truckSvg}</div>`, iconSize: [40, 40], iconAnchor: [20, 20] });
   const marker = L.marker([4.6, -74.08], { icon: mkIcon("") }).addTo(map);
   const trail = L.polyline([], { color: "#2ecc71", weight: 4, opacity: 0.9 }).addTo(map);

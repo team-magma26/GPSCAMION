@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>{{ app_name }} — Live</title>
-<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns=%22http://www.w3.org/2000/svg%22%20viewBox=%220%200%2032%2032%22%3E%3Cdefs%3E%3ClinearGradient%20id=%22g%22%20x1=%220%22%20y1=%220%22%20x2=%221%22%20y2=%221%22%3E%3Cstop%20offset=%220%22%20stop-color=%22%23a8dcf0%22/%3E%3Cstop%20offset=%221%22%20stop-color=%22%235aa9d6%22/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect%20width=%2232%22%20height=%2232%22%20rx=%228%22%20fill=%22url%28%23g%29%22/%3E%3Cg%20transform=%22translate%284%204%29%22%20fill=%22none%22%20stroke=%22%230d1b2a%22%20stroke-width=%221.9%22%20stroke-linecap=%22round%22%20stroke-linejoin=%22round%22%3E%3Cpath%20d=%22M1%206h13v10H1z%22/%3E%3Cpath%20d=%22M14%209h4l3%203v4h-7z%22/%3E%3Ccircle%20cx=%226%22%20cy=%2218%22%20r=%222%22/%3E%3Ccircle%20cx=%2217%22%20cy=%2218%22%20r=%222%22/%3E%3C/g%3E%3C/svg%3E">
+<title>OnRoute · {{ app_name }}</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns=%22http://www.w3.org/2000/svg%22%20viewBox=%220%200%2032%2032%22%3E%3Cdefs%3E%3ClinearGradient%20id=%22g%22%20x1=%220%22%20y1=%220%22%20x2=%221%22%20y2=%221%22%3E%3Cstop%20offset=%220%22%20stop-color=%22%23a8dcf0%22/%3E%3Cstop%20offset=%221%22%20stop-color=%22%235aa9d6%22/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect%20width=%2232%22%20height=%2232%22%20rx=%228%22%20fill=%22url%28%23g%29%22/%3E%3Csvg%20x=%223%22%20y=%223%22%20width=%2226%22%20height=%2226%22%20viewBox=%222%201.5%2020.5%2020.5%22%20fill=%22none%22%20stroke=%22%230d1b2a%22%20stroke-width=%222.3%22%20stroke-linecap=%22round%22%20stroke-linejoin=%22round%22%20color=%22%230d1b2a%22%3E%3Cpath%20d=%22M16%203.2a4.6%204.6%200%200%200-4.6%204.6c0%203.3%204.6%207.6%204.6%207.6s4.6-4.3%204.6-7.6A4.6%204.6%200%200%200%2016%203.2z%22/%3E%3Ccircle%20cx=%2216%22%20cy=%227.8%22%20r=%221.5%22%20fill=%22currentColor%22/%3E%3Cpath%20d=%22M4.5%2020.5c3.5%200%203-5%207.5-5%22%20stroke-dasharray=%220.1%202.8%22/%3E%3Ccircle%20cx=%224.5%22%20cy=%2220.5%22%20r=%221.6%22%20fill=%22currentColor%22%20stroke=%22none%22/%3E%3C/svg%3E%3C/svg%3E">
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -319,6 +319,84 @@
     .topbar:not(.open) .app-sub { display: none; }
     main.container-fluid { margin-top: 1rem !important; }
   }
+
+  /* ================= Ajustes por la encuesta de usuarios ================= */
+  /* 1) Misma paleta oscura, pero con más contraste: paneles y bordes un poco más claros, texto secundario más legible */
+  :root { --surface: #1f2e4a; --raise: #2b3e62; --line: #3a5075; --muted: #b6c2d6; }
+  .panel { background: linear-gradient(180deg, rgba(43,62,98,.62), rgba(31,46,74,.96)); border-color: var(--line); }
+  .topbar { background: rgba(31,46,74,.92); }
+  .form-control, .form-select { background-color: rgba(13,27,42,.7); border-color: #4a6188; }
+  .btn-quiet { border-color: #4a6188; }
+  .stat-tile { background: rgba(13,27,42,.6); }
+  .routes-table td, .routes-table th { border-color: var(--line); }
+
+  /* 2) Letras más grandes y más espacio entre elementos */
+  body { font-size: 15px; }
+  .panel { padding: 24px; margin-bottom: 20px; }
+  .panel-title { font-size: 17px; margin-bottom: 18px; }
+  .field-label { font-size: 13.5px; }
+  .section-label { font-size: 14.5px; margin: 22px 0 12px; }
+  .muted { font-size: 14px; }
+  .status { font-size: 13.5px; }
+  .seg label { font-size: 15px; }
+  .seg.sm label { font-size: 14px; }
+  .form-control, .form-select, .form-control-sm, .form-select-sm { font-size: 15px; }
+  .btn-sm { font-size: 14px; padding: 7px 14px; }
+  .notice { font-size: 14px; }
+  .pass-item, .place-result { font-size: 14px; }
+  .popover-body { font-size: 14px; }
+  .routes-table { font-size: 14px; }
+  .routes-table th { font-size: 13px; }
+  .routes-table td { padding-top: 9px; padding-bottom: 9px; }
+  .route-meta { font-size: 13px; }
+  .hist-badge { font-size: 12px; }
+  .ts-title { font-size: 19px; }
+  .ts-sub { font-size: 14px; }
+  .app-sub { font-size: 12px; }
+  .stat-tile .stat-label, #statsCard .stat-tile .stat-label { font-size: 12px; }
+  .route-legend { font-size: 13px; color: var(--muted); margin-top: 12px; line-height: 1.6; }
+  .route-legend b { color: var(--text); }
+  .route-legend .lg-pin {
+    display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 50%;
+    background: var(--accent); color: #0d1b2a; font-weight: 800; font-size: 11px; vertical-align: middle; margin-right: 4px;
+  }
+
+  /* 3) Botón "Seguir camión" dentro del mapa */
+  .map-follow-btn {
+    display: inline-flex; align-items: center; gap: 8px; padding: 9px 14px; border-radius: 12px; cursor: pointer;
+    font: 600 14px 'Sora', 'Manrope', sans-serif; color: var(--text);
+    background: rgba(31,46,74,.95); border: 1px solid #4a6188; box-shadow: 0 6px 18px rgba(0,0,0,.35);
+  }
+  .map-follow-btn svg { width: 18px; height: 18px; }
+  .map-follow-btn.active { background: var(--grad); color: #0d1b2a; border-color: transparent; }
+  .map-follow-btn:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+
+  /* 4) Coordenadas en segundo plano */
+  .ago-line { font-size: 14px; color: var(--muted); margin-top: 12px; }
+  .ago-line b { color: var(--text); }
+  .coords { margin-top: 12px; border-top: 1px solid var(--line); padding-top: 10px; }
+  .coords summary { cursor: pointer; font-size: 14px; color: var(--accent); font-weight: 600; }
+  .coords .coord-row { display: flex; justify-content: space-between; font-size: 14px; margin-top: 8px; font-variant-numeric: tabular-nums; }
+  .coords .coord-row span:first-child { color: var(--muted); }
+
+  /* 5) Aviso visible cuando el camión deja de enviar datos */
+  #mapWrap { position: relative; }
+  .map-alert {
+    position: absolute; z-index: 800; bottom: 26px; left: 50%; transform: translateX(-50%);
+    width: min(560px, calc(100% - 28px)); display: flex; align-items: flex-start; gap: 10px;
+    padding: 12px 16px; border-radius: 14px; font-size: 14px; line-height: 1.4; color: #fff;
+    background: rgba(140, 78, 20, .94); border: 1px solid #f4a261; box-shadow: 0 10px 26px rgba(0,0,0,.4);
+  }
+  .map-alert svg { flex-shrink: 0; width: 20px; height: 20px; color: #ffd8b0; margin-top: 1px; }
+  .map-alert b { display: block; font-size: 15px; }
+  /* Logo de OnRoute: el pin necesita un poco más de tamaño que el camión anterior */
+  .logo svg { width: 36px; height: 36px; }
+  @media (max-width: 991px) { .logo svg { width: 29px; height: 29px; } }
+
+  /* En computador va arriba (junto al zoom) para que se vea sin hacer scroll; en celular queda abajo */
+  @media (min-width: 992px) {
+    .map-alert { top: 12px; bottom: auto; left: 58px; transform: none; width: min(560px, calc(100% - 270px)); }
+  }
 </style>
 </head>
 <body data-mode="live">
@@ -326,13 +404,13 @@
 <header class="topbar">
   <div class="container-fluid px-3 px-lg-4 py-3 d-flex align-items-center flex-wrap gap-3">
     <div class="logo" id="logoIcon">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M1 6h13v10H1z"/><path d="M14 9h4l3 3v4h-7z"/><circle cx="6" cy="18" r="2"/><circle cx="17" cy="18" r="2"/>
+      <svg viewBox="2 1.5 20.5 20.5" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M16 3.2a4.6 4.6 0 0 0-4.6 4.6c0 3.3 4.6 7.6 4.6 7.6s4.6-4.3 4.6-7.6A4.6 4.6 0 0 0 16 3.2z"/><circle cx="16" cy="7.8" r="1.5" fill="currentColor"/><path d="M4.5 20.5c3.5 0 3-5 7.5-5" stroke-dasharray="0.1 2.8"/><circle cx="4.5" cy="20.5" r="1.6" fill="currentColor" stroke="none"/>
       </svg>
     </div>
     <div class="flex-grow-1 brand">
-      <h1>Rastreador de camión</h1>
-      <span class="app-sub">{{ app_name }}</span>
+      <h1>OnRoute</h1>
+      <span class="app-sub">Rastreo GPS en tiempo real · {{ app_name }}</span>
     </div>
     <button type="button" class="btn btn-quiet btn-sm d-lg-none" id="topToggle" aria-expanded="false" aria-label="Mostrar u ocultar opciones">
       <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
@@ -375,30 +453,25 @@
             <div class="ts-sub" id="truckStatusSub">Cargando…</div>
           </div>
         </div>
-        <div class="d-flex align-items-center gap-2 mb-3">
-          <div class="form-check form-switch m-0">
-            <input class="form-check-input" type="checkbox" id="followToggle" checked>
-            <label class="form-check-label" for="followToggle">Seguir camión</label>
-          </div>
-          <button type="button" class="info-btn" data-bs-toggle="popover" aria-label="Más información"
-            data-bs-title="Seguir camión" data-bs-content="Mantiene el mapa centrado en el camión. Se apaga solo si mueves el mapa."></button>
-        </div>
+        <p class="muted mb-3">Usa el botón <b>Seguir camión</b> del mapa para mantenerlo centrado.</p>
         <button class="btn btn-quiet btn-sm" id="clearTrail">Limpiar línea del recorrido</button>
       </div>
 
-      <!-- POSICIÓN ACTUAL (solo en vivo) -->
+      <!-- ÚLTIMA UBICACIÓN (solo en vivo) -->
       <div class="panel" id="statsCard">
-        <div class="panel-title">Posición actual</div>
+        <div class="panel-title">Última ubicación recibida</div>
         <div class="row g-2">
-          <div class="col-12"><div class="stat-tile" style="--c:#8ecae6">
-            <span class="stat-label">Latitud</span><span class="stat-value" id="lat">--</span></div></div>
-          <div class="col-12"><div class="stat-tile" style="--c:#2ecc71">
-            <span class="stat-label">Longitud</span><span class="stat-value" id="lon">--</span></div></div>
-          <div class="col-6"><div class="stat-tile" style="--c:#f4a261">
+          <div class="col-6 col-lg-12 col-xl-6"><div class="stat-tile" style="--c:#f4a261">
             <span class="stat-label">Fecha</span><span class="stat-value" id="date">--</span></div></div>
-          <div class="col-6"><div class="stat-tile" style="--c:#b392f0">
+          <div class="col-6 col-lg-12 col-xl-6"><div class="stat-tile" style="--c:#b392f0">
             <span class="stat-label">Hora</span><span class="stat-value" id="time">--</span></div></div>
         </div>
+        <div class="ago-line" id="agoLine">--</div>
+        <details class="coords">
+          <summary>Ver coordenadas</summary>
+          <div class="coord-row"><span>Latitud</span><span id="lat">--</span></div>
+          <div class="coord-row"><span>Longitud</span><span id="lon">--</span></div>
+        </details>
       </div>
 
       <!-- HISTÓRICO: RECORRIDOS -->
@@ -427,7 +500,7 @@
 
         <div class="mt-4">
           <table class="table table-sm align-middle routes-table">
-            <thead><tr><th></th><th>Ruta</th><th>Puntos</th></tr></thead>
+            <thead><tr><th></th><th>Ruta</th><th title="Cantidad de ubicaciones que envió el camión durante la ruta">Lecturas</th></tr></thead>
             <tbody id="routesTableBody">
               <tr class="todos-row">
                 <td><input type="checkbox" class="form-check-input" id="routesTodosCheckbox" aria-label="Marcar todas"></td>
@@ -439,6 +512,10 @@
             <button class="btn btn-quiet btn-sm" id="prevPage" aria-label="Página anterior">‹</button>
             <span id="pageInfo"></span>
             <button class="btn btn-quiet btn-sm" id="nextPage" aria-label="Página siguiente">›</button>
+          </div>
+          <div class="route-legend">
+            <div><span class="lg-pin">A</span> inicio de la ruta · <span class="lg-pin">B</span> final</div>
+            <div><b>Lecturas:</b> cuántas veces el camión envió su ubicación en esa ruta. Más lecturas = trazo más detallado.</div>
           </div>
         </div>
 
@@ -511,6 +588,10 @@
     <section class="col-12 col-lg-9">
       <div id="mapWrap">
         <div id="map" class="map"></div>
+        <div class="map-alert d-none" id="noDataAlert" role="status">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>
+          <div><b id="noDataTitle">El camión no está enviando datos</b><span id="noDataText"></span></div>
+        </div>
       </div>
       <div id="placeWrap" class="d-none">
         <div id="placeMap" class="map"></div>
@@ -593,7 +674,8 @@
   const map = L.map("map").setView([4.6, -74.08], 13);
   addTiles(map);
 
-  const truckSvg = $("logoIcon").innerHTML;
+  // Ícono del vehículo en el mapa (independiente del logo de la app)
+  const truckSvg = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 6h13v10H1z"/><path d="M14 9h4l3 3v4h-7z"/><circle cx="6" cy="18" r="2"/><circle cx="17" cy="18" r="2"/></svg>';
   const mkIcon = (cls) => L.divIcon({ className: "", html: `<div class="truck-pin ${cls}">${truckSvg}</div>`, iconSize: [40, 40], iconAnchor: [20, 20] });
   const marker = L.marker([4.6, -74.08], { icon: mkIcon("") }).addTo(map);
   const trail = L.polyline([], { color: "#2ecc71", weight: 4, opacity: 0.9 }).addTo(map);
@@ -670,6 +752,8 @@
     $("mapWrap").classList.toggle("d-none", v === "place");
     $("statsCard").classList.toggle("d-none", v !== "live");
     $("placeWrap").classList.toggle("d-none", v !== "place");
+    followBtn.classList.toggle("d-none", v !== "live");
+    refreshTruckStatus();
     if (v !== "routes") stopSim();
 
     if (prev === "live" && v !== "live") {
@@ -933,12 +1017,28 @@
   });
 
   // ---------- En vivo ----------
-  const followToggle = $("followToggle");
-  followToggle.addEventListener("change", () => {
-    followTruck = followToggle.checked;
-    if (followTruck && !historyMode) map.panTo(marker.getLatLng());
+  // Botón "Seguir camión" dentro del mapa (antes estaba en el panel y en celular quedaba lejos)
+  const FollowControl = L.Control.extend({
+    options: { position: "topright" },
+    onAdd() {
+      const b = L.DomUtil.create("button", "map-follow-btn active");
+      b.type = "button";
+      b.title = "Mantiene el mapa centrado en el camión. Se apaga solo si mueves el mapa.";
+      b.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2.5" fill="currentColor"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg><span>Seguir camión</span>';
+      L.DomEvent.disableClickPropagation(b);
+      L.DomEvent.on(b, "click", () => setFollow(!followTruck));
+      return b;
+    },
   });
-  map.on("dragstart", () => { followTruck = false; followToggle.checked = false; });
+  const followBtn = new FollowControl().addTo(map).getContainer();
+  function setFollow(on) {
+    followTruck = on;
+    followBtn.classList.toggle("active", on);
+    followBtn.setAttribute("aria-pressed", String(on));
+    if (on && !historyMode) map.panTo(marker.getLatLng());
+  }
+  setFollow(true);
+  map.on("dragstart", () => setFollow(false));
   $("clearTrail").addEventListener("click", () => trail.setLatLngs([]));
 
   function updateFields(data) {
@@ -946,8 +1046,6 @@
     $("lon").textContent = data.lon !== null ? data.lon : "--";
     $("date").textContent = data.date !== null ? data.date : "--";
     $("time").textContent = data.time !== null ? data.time : "--";
-    $("status").textContent = "En vivo — última actualización " + new Date().toLocaleTimeString();
-    $("dot").classList.add("live");
   }
 
   function updateMap(lat, lon, addToTrail = true) {
@@ -1113,12 +1211,48 @@
     $("truckStatusSub").textContent = sub;
   }
 
+  // "hace 5 min", "hace 3 días"...
+  function fmtAgo(ms) {
+    const s = Math.max(0, Math.round(ms / 1000));
+    if (s < 60) return `hace ${s} s`;
+    const m = Math.round(s / 60);
+    if (m < 60) return `hace ${m} min`;
+    const h = Math.round(m / 60);
+    if (h < 24) return `hace ${h} h`;
+    const d = Math.round(h / 24);
+    return `hace ${d} día${d > 1 ? "s" : ""}`;
+  }
+
+  let sseDown = false; // true si se cayó la conexión con el servidor
+  function lastSeenAt() { return lastMsgAt || parseTime(lastRoute.end); }
+
+  // Indicador superior, "Recibida hace X" y aviso sobre el mapa cuando el camión deja de enviar datos
+  function updateSignalUI(fresh) {
+    const seen = lastSeenAt();
+    const ago = seen ? fmtAgo(Date.now() - seen) : null;
+    $("agoLine").innerHTML = seen ? `Recibida <b>${ago}</b>` : "Aún no hay datos del camión";
+    if (!sseDown) {
+      $("dot").classList.toggle("live", fresh);
+      $("status").textContent = fresh ? `En vivo — último dato ${ago}`
+        : seen ? `Sin datos del camión · último ${ago}` : "Esperando datos del camión";
+    }
+    const show = !fresh && view === "live";
+    $("noDataAlert").classList.toggle("d-none", !show);
+    if (show) {
+      $("noDataText").textContent = seen
+        ? `Último dato ${ago} (${fmtLast(lastRoute.end)}). En el mapa ves su última ruta; se actualiza sola cuando vuelva a enviar.`
+        : "Todavía no ha enviado ninguna ubicación.";
+    }
+  }
+
   function refreshTruckStatus() {
     if (!lastMsgAt || Date.now() - lastMsgAt > SIGNAL_TIMEOUT_MS) {
       recentPoints.length = 0;
       showLastRoute();
+      updateSignalUI(false);
       return;
     }
+    updateSignalUI(true);
     if (recentPoints.length < 2) { setTruckStatus("on", "En línea", "Recibiendo datos"); return; }
     const a = recentPoints[0], b = recentPoints[recentPoints.length - 1];
     const hours = (b.t - a.t) / 3600000;
@@ -1186,7 +1320,9 @@
     if (data.lat !== null && data.lon !== null && !historyMode) updateMap(data.lat, data.lon, true);
   };
 
+  source.onopen = () => { sseDown = false; refreshTruckStatus(); };
   source.onerror = () => {
+    sseDown = true;
     $("dot").classList.remove("live");
     $("status").textContent = "Conexión perdida — reintentando…";
   };
@@ -1365,4 +1501,4 @@
 </script>
 
 </body>
-</html>
+</html>

@@ -453,6 +453,41 @@
   .eta-card .btn { margin-top: 16px; min-height: 44px; }
   @media (prefers-reduced-motion: reduce) { .eta-card .eta-icon::after { animation: none; display: none; } }
 
+  /* ===== Bienvenida para usuarios nuevos ===== */
+  .welcome {
+    position: relative; overflow: hidden; padding: 24px 22px 22px; border-radius: 24px; margin-bottom: 22px; color: #fff;
+    background:
+      radial-gradient(90% 80% at 100% 0%, rgba(226,50,45,.35), transparent 60%),
+      linear-gradient(150deg, #2f74e6 0%, #1b4fb5 55%, #163c86 100%);
+    border: 1px solid rgba(255,255,255,.18); box-shadow: 0 20px 44px rgba(20,60,140,.45);
+  }
+  .welcome::after {
+    content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 6px;
+    background: linear-gradient(90deg, #fff 0 18%, #e2322d 18% 100%);
+  }
+  .wl-route { display: flex; align-items: center; gap: 8px; font: 700 12px 'Sora', sans-serif; letter-spacing: 1.2px; text-transform: uppercase; opacity: .9; }
+  .wl-route i { width: 8px; height: 8px; border-radius: 50%; background: #fff; flex-shrink: 0; }
+  .wl-route span.line { flex: 0 0 34px; height: 2px; background: repeating-linear-gradient(90deg, #fff 0 5px, transparent 5px 9px); }
+  .wl-title { font: 800 clamp(1.6rem, 2.4vw, 1.9rem)/1.1 'Bricolage Grotesque', 'Sora', sans-serif; margin: 14px 0 8px; letter-spacing: -.5px; max-inline-size: 16ch; text-wrap: balance; }
+  .wl-text { font-size: 15px; line-height: 1.5; color: rgba(255,255,255,.88); margin: 0 0 16px; }
+  .wl-steps { list-style: none; padding: 0; margin: 0 0 18px; display: grid; gap: 8px; }
+  .wl-steps li { display: flex; align-items: center; gap: 12px; padding: 9px 12px; border-radius: 14px; background: rgba(255,255,255,.12); font-weight: 600; font-size: 14.5px; }
+  .wl-steps b { width: 26px; height: 26px; flex-shrink: 0; display: grid; place-items: center; border-radius: 50%; background: #fff; color: #1b4fb5; font: 800 13px 'Sora', sans-serif; }
+  .wl-actions { display: flex; gap: 10px; }
+  .wl-actions .btn { min-height: 46px; }
+  .wl-go { flex: 1; background: #fff; color: #163c86; border: 0; box-shadow: 0 8px 20px rgba(0,0,0,.25); }
+  .wl-go:hover, .wl-go:focus { background: #fff; color: #163c86; filter: brightness(.96); }
+  .wl-skip { background: rgba(255,255,255,.14); color: #fff; border: 1px solid rgba(255,255,255,.3); }
+  .wl-skip:hover { background: rgba(255,255,255,.22); color: #fff; }
+  .wl-bus { position: absolute; right: -6px; top: 16px; width: 92px; height: 92px; opacity: .22; color: #fff; pointer-events: none; }
+  body:not([data-mode=live]) #welcome { display: none !important; }
+
+  /* Entrada suave de los paneles al abrir la página */
+  @keyframes riseIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+  aside > * { animation: riseIn .45s ease-out both; }
+  aside > *:nth-child(2) { animation-delay: .06s; } aside > *:nth-child(3) { animation-delay: .12s; } aside > *:nth-child(4) { animation-delay: .18s; }
+  @media (prefers-reduced-motion: reduce) { aside > * { animation: none; } }
+
   /* ===== Marcador del bus en el mapa ===== */
   .bus-marker { --b1: #2f74e6; --b2: #1b4fb5; --red: #e2322d; --bd: #12398a; position: relative; width: 56px; height: 62px; }
   /* Colores del bus Costa Azul: azul arriba, franja blanca y rojo abajo */
@@ -601,6 +636,23 @@
 
     <!-- ============ PANELES ============ -->
     <aside class="col-12 col-lg-3">
+
+      <!-- BIENVENIDA (solo la primera vez que alguien abre la página) -->
+      <section class="welcome d-none" id="welcome" aria-labelledby="wlTitle">
+        <svg class="wl-bus" viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="1.5" width="17" height="17" rx="3.5" fill="currentColor"/><rect x="5.5" y="17" width="3.5" height="4.5" rx="1.2" fill="currentColor"/><rect x="15" y="17" width="3.5" height="4.5" rx="1.2" fill="currentColor"/></svg>
+        <div class="wl-route"><i></i>Costa Azul<span class="line"></span><i></i>Puerto Colombia</div>
+        <h2 class="wl-title" id="wlTitle">Sigue tu bus en tiempo real</h2>
+        <p class="wl-text">Mira dónde va el bus y cuánto le falta para llegar a donde estás. Sin registrarte.</p>
+        <ol class="wl-steps">
+          <li><b>1</b>Permite tu ubicación</li>
+          <li><b>2</b>Mira en cuántos minutos llega</li>
+          <li><b>3</b>Síguelo en el mapa</li>
+        </ol>
+        <div class="wl-actions">
+          <button type="button" class="btn wl-go" id="wlStart">Empezar</button>
+          <button type="button" class="btn wl-skip" id="wlSkip">Ahora no</button>
+        </div>
+      </section>
 
       <!-- ¿CUÁNDO LLEGA EL BUS? (semana 2: ubicación del usuario + tráfico) -->
       <div id="etaPanel">
@@ -1902,7 +1954,29 @@
   }
 
   $("etaBtn").addEventListener("click", startGeolocation);
-  startGeolocation(); // pide el permiso de ubicación al abrir la página
+
+  // Primera visita: bienvenida y el permiso se pide al tocar "Empezar" (con contexto).
+  // Visitas siguientes: el permiso se pide apenas abre la página.
+  let welcomed = false;
+  try { welcomed = localStorage.getItem("onrouteWelcomed") === "1"; } catch (e) {}
+  function closeWelcome() {
+    $("welcome").classList.add("d-none");
+    try { localStorage.setItem("onrouteWelcomed", "1"); } catch (e) {}
+  }
+  if (welcomed) {
+    startGeolocation();
+  } else {
+    $("welcome").classList.remove("d-none");
+    setEta("wait", { chip: "Listo", label: "Tu bus llega en", num: "Toca Empezar", textMain: true,
+      sub: "Con tu ubicación te decimos en cuántos minutos llega el bus." });
+  }
+  $("wlStart").addEventListener("click", () => { closeWelcome(); startGeolocation(); });
+  $("wlSkip").addEventListener("click", () => {
+    closeWelcome();
+    setEta("off", { chip: "Sin ubicación", label: "¿Dónde estás?", num: "Cuando quieras", textMain: true,
+      sub: "Toca el botón para saber cuánto tarda el bus en llegar a ti." });
+    $("etaBtn").classList.remove("d-none");
+  });
 
   setView("live");
 </script>

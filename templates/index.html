@@ -548,6 +548,8 @@
   .adv-item[aria-current=true] { background: color-mix(in srgb, var(--accent) 14%, transparent); }
   .adv-key { padding: 4px 10px 10px; }
   .adv-key label { font-size: 12.5px; color: var(--muted); margin-bottom: 6px; display: block; }
+  .adv-msg { font-size: 12.5px; color: #ff8a8a; margin-top: 6px; }
+  .adv-msg:empty { display: none; }
   .user-pin {
     width: 22px; height: 22px; border-radius: 50%; background: #4dabf7; border: 3px solid #fff;
     box-shadow: 0 0 0 6px rgba(77,171,247,.3), 0 2px 8px rgba(0,0,0,.4);
@@ -624,9 +626,10 @@
         <form class="adv-key d-none" id="advKeyForm">
           <label for="advKey">Clave de métricas</label>
           <div class="input-group input-group-sm">
-            <input type="password" class="form-control" id="advKey" autocomplete="off" required>
+            <input type="password" class="form-control" id="advKey" autocomplete="off" required aria-describedby="advKeyMsg">
             <button class="btn btn-accent" type="submit">Abrir</button>
           </div>
+          <div class="adv-msg" id="advKeyMsg" role="alert"></div>
         </form>
       </div>
     </div>
@@ -1067,14 +1070,26 @@
   function openMetrics(key) {
     window.open(`/metricas${key ? "?key=" + encodeURIComponent(key) : ""}`, "_blank", "noopener");
   }
+  function forgetMetricsKey() { try { localStorage.removeItem("onrouteMetricsKey"); } catch (e) {} }
+  // Revisa la clave con el servidor antes de guardarla (si es incorrecta, no se guarda)
+  function checkMetricsKey(key) {
+    return fetch(`/api/metrics?days=1&key=${encodeURIComponent(key)}`, { method: "GET" }).then((r) => r.ok);
+  }
+  function askMetricsKey(msg) {
+    $("advKeyForm").classList.remove("d-none");
+    $("advKeyMsg").textContent = msg || "";
+    $("advKey").focus();
+  }
   advMenu.querySelectorAll(".adv-item").forEach((b) => b.addEventListener("click", () => {
     const go = b.dataset.go;
     if (go === "metrics") {
       let saved = null;
       try { saved = localStorage.getItem("onrouteMetricsKey"); } catch (e) {}
-      if (saved) { openMetrics(saved); setAdvOpen(false); return; }
-      $("advKeyForm").classList.remove("d-none");
-      $("advKey").focus();
+      if (!saved) { askMetricsKey(""); return; }
+      checkMetricsKey(saved).then((ok) => {
+        if (ok) { openMetrics(saved); setAdvOpen(false); }
+        else { forgetMetricsKey(); askMetricsKey("La clave guardada ya no sirve. Escríbela de nuevo."); }
+      }).catch(() => askMetricsKey("No se pudo revisar la clave. Intenta de nuevo."));
       return;
     }
     setAdvOpen(false);
@@ -1084,10 +1099,14 @@
     e.preventDefault();
     const key = $("advKey").value.trim();
     if (!key) return;
-    try { localStorage.setItem("onrouteMetricsKey", key); } catch (err) {}
-    openMetrics(key);
-    $("advKey").value = "";
-    setAdvOpen(false);
+    checkMetricsKey(key).then((ok) => {
+      if (!ok) { $("advKeyMsg").textContent = "Clave incorrecta. Revisa e intenta de nuevo."; $("advKey").select(); return; }
+      try { localStorage.setItem("onrouteMetricsKey", key); } catch (err) {}
+      openMetrics(key);
+      $("advKey").value = "";
+      $("advKeyMsg").textContent = "";
+      setAdvOpen(false);
+    }).catch(() => { $("advKeyMsg").textContent = "No se pudo revisar la clave. Intenta de nuevo."; });
   });
   $("subRoutes").addEventListener("change", () => setView("routes"));
   $("subPlace").addEventListener("change", () => setView("place"));

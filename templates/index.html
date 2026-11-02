@@ -265,7 +265,7 @@
     font-variant-numeric: lining-nums tabular-nums; color: #fff;
   }
 
-  /* ===== Estado del camión ===== */
+  /* ===== Estado del bus ===== */
   .truck-status {
     --s: var(--muted); display: flex; align-items: center; gap: 14px; padding: 14px 16px; margin-bottom: 16px; border-radius: 16px;
     background: color-mix(in srgb, var(--s) 12%, rgba(13,27,42,.45)); border: 1px solid color-mix(in srgb, var(--s) 40%, var(--line));
@@ -361,7 +361,7 @@
     background: var(--accent); color: #0d1b2a; font-weight: 800; font-size: 11px; vertical-align: middle; margin-right: 4px;
   }
 
-  /* 3) Botón "Seguir camión" dentro del mapa */
+  /* 3) Botón "Seguir bus" dentro del mapa */
   .map-follow-btn {
     display: inline-flex; align-items: center; gap: 8px; padding: 9px 14px; border-radius: 12px; cursor: pointer;
     font: 600 14px 'Sora', 'Manrope', sans-serif; color: var(--text);
@@ -379,7 +379,7 @@
   .coords .coord-row { display: flex; justify-content: space-between; font-size: 14px; margin-top: 8px; font-variant-numeric: tabular-nums; }
   .coords .coord-row span:first-child { color: var(--muted); }
 
-  /* 5) Aviso visible cuando el camión deja de enviar datos */
+  /* 5) Aviso visible cuando el bus deja de enviar datos */
   #mapWrap { position: relative; }
   .map-alert {
     position: absolute; z-index: 800; bottom: 26px; left: 50%; transform: translateX(-50%);
@@ -389,9 +389,32 @@
   }
   .map-alert svg { flex-shrink: 0; width: 20px; height: 20px; color: #ffd8b0; margin-top: 1px; }
   .map-alert b { display: block; font-size: 15px; }
-  /* Logo de OnRoute: el pin necesita un poco más de tamaño que el camión anterior */
+  /* Logo de OnRoute: el pin necesita un poco más de tamaño que el bus anterior */
   .logo svg { width: 36px; height: 36px; }
   @media (max-width: 991px) { .logo svg { width: 29px; height: 29px; } }
+
+  /* ===== Semana 2: ¿Cuándo llega el bus? ===== */
+  .eta-box {
+    --s: var(--muted); padding: 16px 18px; border-radius: 16px; margin-bottom: 14px;
+    background: color-mix(in srgb, var(--s) 12%, rgba(13,27,42,.45)); border: 1px solid color-mix(in srgb, var(--s) 40%, var(--line));
+    transition: background .3s, border-color .3s;
+  }
+  .eta-box[data-state=ok]      { --s: var(--live); }
+  .eta-box[data-state=here]    { --s: #ffd166; }
+  .eta-box[data-state=leaving] { --s: var(--hist); }
+  .eta-box[data-state=wait]    { --s: var(--place); }
+  .eta-main {
+    font-family: 'Bricolage Grotesque', 'Sora', sans-serif; font-weight: 800; font-size: 34px; line-height: 1.05;
+    color: #fff; font-variant-numeric: lining-nums tabular-nums;
+  }
+  .eta-sub { font-size: 14px; color: var(--muted); margin-top: 6px; line-height: 1.45; }
+  .eta-sub b { color: var(--text); }
+  .eta-note { font-size: 12.5px; color: var(--muted); margin-top: 8px; opacity: .85; }
+  .eta-note:empty { display: none; }
+  .user-pin {
+    width: 22px; height: 22px; border-radius: 50%; background: #4dabf7; border: 3px solid #fff;
+    box-shadow: 0 0 0 6px rgba(77,171,247,.3), 0 2px 8px rgba(0,0,0,.4);
+  }
 
   /* En computador va arriba (junto al zoom) para que se vea sin hacer scroll; en celular queda abajo */
   @media (min-width: 992px) {
@@ -440,20 +463,34 @@
     <!-- ============ PANELES ============ -->
     <aside class="col-12 col-lg-3">
 
+      <!-- ¿CUÁNDO LLEGA EL BUS? (semana 2: ubicación del usuario + tráfico) -->
+      <div class="panel" id="etaPanel">
+        <div class="panel-title">¿Cuándo llega el bus?
+          <button type="button" class="info-btn" data-bs-toggle="popover" aria-label="Más información"
+            data-bs-title="Tiempo de llegada" data-bs-content="Con tu ubicación calculamos cuánto tarda el bus en llegar hasta donde estás, por las calles y con el tráfico de este momento. Se actualiza cada 30 segundos. Tu ubicación no se guarda."></button>
+        </div>
+        <div class="eta-box" id="etaBox" data-state="wait">
+          <div class="eta-main" id="etaMain">--</div>
+          <div class="eta-sub" id="etaSub">Activa tu ubicación para calcular cuánto tarda el bus en llegar a donde estás.</div>
+          <div class="eta-note" id="etaNote"></div>
+        </div>
+        <button class="btn btn-accent btn-sm d-none" id="etaBtn">Usar mi ubicación</button>
+      </div>
+
       <!-- EN VIVO -->
       <div class="panel" id="livePanel">
         <div class="panel-title">En vivo
           <button type="button" class="info-btn" data-bs-toggle="popover" aria-label="Más información"
-            data-bs-title="En vivo" data-bs-content="Muestra dónde está el camión ahora mismo. El mapa se actualiza solo. El estado indica si el camión está en movimiento o detenido. Si lleva más de 1 minuto sin enviar datos, muestra su última ruta."></button>
+            data-bs-title="En vivo" data-bs-content="Muestra dónde está el bus ahora mismo. El mapa se actualiza solo. El estado indica si el bus está en movimiento o detenido. Si lleva más de 1 minuto sin enviar datos, muestra su última ruta."></button>
         </div>
         <div class="truck-status" id="truckStatus" data-state="last">
           <span class="ts-dot"></span>
           <div>
-            <div class="ts-title" id="truckStatusTitle">Última ruta del camión</div>
+            <div class="ts-title" id="truckStatusTitle">Última ruta del bus</div>
             <div class="ts-sub" id="truckStatusSub">Cargando…</div>
           </div>
         </div>
-        <p class="muted mb-3">Usa el botón <b>Seguir camión</b> del mapa para mantenerlo centrado.</p>
+        <p class="muted mb-3">Usa el botón <b>Seguir bus</b> del mapa para mantenerlo centrado.</p>
         <button class="btn btn-quiet btn-sm" id="clearTrail">Limpiar línea del recorrido</button>
       </div>
 
@@ -478,7 +515,7 @@
       <div class="panel d-none" id="routesPanel">
         <div class="panel-title">Recorridos
           <button type="button" class="info-btn" data-bs-toggle="popover" aria-label="Más información"
-            data-bs-title="¿Qué es una ruta?" data-bs-content="Una ruta es un trayecto continuo del camión. Termina cuando pasa 1 minuto sin enviar datos, y el siguiente trayecto empieza como una ruta nueva. En el mapa, A es el inicio y B es el final. Marca las rutas que quieras ver."></button>
+            data-bs-title="¿Qué es una ruta?" data-bs-content="Una ruta es un trayecto continuo del bus. Termina cuando pasa 1 minuto sin enviar datos, y el siguiente trayecto empieza como una ruta nueva. En el mapa, A es el inicio y B es el final. Marca las rutas que quieras ver."></button>
         </div>
 
         <div class="row g-2">
@@ -500,7 +537,7 @@
 
         <div class="mt-4">
           <table class="table table-sm align-middle routes-table">
-            <thead><tr><th></th><th>Ruta</th><th title="Cantidad de ubicaciones que envió el camión durante la ruta">Lecturas</th></tr></thead>
+            <thead><tr><th></th><th>Ruta</th><th title="Cantidad de ubicaciones que envió el bus durante la ruta">Lecturas</th></tr></thead>
             <tbody id="routesTableBody">
               <tr class="todos-row">
                 <td><input type="checkbox" class="form-check-input" id="routesTodosCheckbox" aria-label="Marcar todas"></td>
@@ -515,14 +552,14 @@
           </div>
           <div class="route-legend">
             <div><span class="lg-pin">A</span> inicio de la ruta · <span class="lg-pin">B</span> final</div>
-            <div><b>Lecturas:</b> cuántas veces el camión envió su ubicación en esa ruta. Más lecturas = trazo más detallado.</div>
+            <div><b>Lecturas:</b> cuántas veces el bus envió su ubicación en esa ruta. Más lecturas = trazo más detallado.</div>
           </div>
         </div>
 
         <div class="sim-box d-none" id="simPanel">
           <div class="panel-title" style="font-size:15px;margin-bottom:12px">Simular recorrido
             <button type="button" class="info-btn" data-bs-toggle="popover" aria-label="Más información"
-              data-bs-title="Simular recorrido" data-bs-content="Reproduce la ruta como un video: el camión se mueve punto por punto. Arrastra la barra para saltar a otro momento y sube la velocidad si va muy lento."></button>
+              data-bs-title="Simular recorrido" data-bs-content="Reproduce la ruta como un video: el bus se mueve punto por punto. Arrastra la barra para saltar a otro momento y sube la velocidad si va muy lento."></button>
           </div>
           <select class="form-select form-select-sm mb-3" id="simRoute" aria-label="Ruta a simular"></select>
           <input type="range" class="form-range" id="simSlider" min="0" max="1000" value="0" aria-label="Progreso del recorrido">
@@ -542,7 +579,7 @@
       <div class="panel d-none" id="placePanel">
         <div class="panel-title">Buscar por lugar
           <button type="button" class="info-btn" data-bs-toggle="popover" aria-label="Más información"
-            data-bs-title="Buscar por lugar" data-bs-content="Descubre cuándo pasó el camión por un punto. Cada pasada muestra la hora de entrada y de salida de la zona. Al buscar un lugar, cada resultado indica si el camión tiene historial ahí."></button>
+            data-bs-title="Buscar por lugar" data-bs-content="Descubre cuándo pasó el bus por un punto. Cada pasada muestra la hora de entrada y de salida de la zona. Al buscar un lugar, cada resultado indica si el bus tiene historial ahí."></button>
         </div>
 
         <div class="field-label">1. Ve a un lugar</div>
@@ -554,7 +591,7 @@
 
         <div class="section-label">2. Marca el punto
           <button type="button" class="info-btn" data-bs-toggle="popover" aria-label="Más información"
-            data-bs-title="Radio de búsqueda" data-bs-content="Es la distancia alrededor del punto donde se busca al camión: 200 m. Cada vez que el camión envía su ubicación se guarda una lectura. Si una lectura cae dentro del círculo azul, el camión pasó por ahí. Varias lecturas seguidas dentro del círculo, con menos de 5 minutos entre una y otra, se agrupan en una sola pasada, con su hora de entrada y de salida."></button>
+            data-bs-title="Radio de búsqueda" data-bs-content="Es la distancia alrededor del punto donde se busca al bus: 200 m. Cada vez que el bus envía su ubicación se guarda una lectura. Si una lectura cae dentro del círculo azul, el bus pasó por ahí. Varias lecturas seguidas dentro del círculo, con menos de 5 minutos entre una y otra, se agrupan en una sola pasada, con su hora de entrada y de salida."></button>
         </div>
         <div class="muted" id="pickPrompt">Haz clic en el mapa.</div>
         <div class="point-chip d-none" id="pointChip"></div>
@@ -590,7 +627,7 @@
         <div id="map" class="map"></div>
         <div class="map-alert d-none" id="noDataAlert" role="status">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>
-          <div><b id="noDataTitle">El camión no está enviando datos</b><span id="noDataText"></span></div>
+          <div><b id="noDataTitle">El bus no está enviando datos</b><span id="noDataText"></span></div>
         </div>
       </div>
       <div id="placeWrap" class="d-none">
@@ -675,7 +712,7 @@
   addTiles(map);
 
   // Ícono del vehículo en el mapa (independiente del logo de la app)
-  const truckSvg = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 6h13v10H1z"/><path d="M14 9h4l3 3v4h-7z"/><circle cx="6" cy="18" r="2"/><circle cx="17" cy="18" r="2"/></svg>';
+  const truckSvg = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5.2 17.5H4a1 1 0 0 1-1-1V6.5A2.5 2.5 0 0 1 5.5 4h11A3.5 3.5 0 0 1 20 7.5l1 5.5v3.5a1 1 0 0 1-1 1h-1.2"/><path d="M9.2 17.5h5.6"/><path d="M3 12h18"/><path d="M8 4v8M13 4v8"/><circle cx="7.2" cy="17.6" r="2"/><circle cx="16.8" cy="17.6" r="2"/></svg>';
   const mkIcon = (cls) => L.divIcon({ className: "", html: `<div class="truck-pin ${cls}">${truckSvg}</div>`, iconSize: [40, 40], iconAnchor: [20, 20] });
   const marker = L.marker([4.6, -74.08], { icon: mkIcon("") }).addTo(map);
   const trail = L.polyline([], { color: "#2ecc71", weight: 4, opacity: 0.9 }).addTo(map);
@@ -747,6 +784,8 @@
     $("subPlace").checked = v === "place";
     $("subNav").classList.toggle("d-none", v === "live");
     $("livePanel").classList.toggle("d-none", v !== "live");
+    $("etaPanel").classList.toggle("d-none", v !== "live");
+    etaSetMapLayers(v === "live");
     $("routesPanel").classList.toggle("d-none", v !== "routes");
     $("placePanel").classList.toggle("d-none", v !== "place");
     $("mapWrap").classList.toggle("d-none", v === "place");
@@ -1017,14 +1056,14 @@
   });
 
   // ---------- En vivo ----------
-  // Botón "Seguir camión" dentro del mapa (antes estaba en el panel y en celular quedaba lejos)
+  // Botón "Seguir bus" dentro del mapa (antes estaba en el panel y en celular quedaba lejos)
   const FollowControl = L.Control.extend({
     options: { position: "topright" },
     onAdd() {
       const b = L.DomUtil.create("button", "map-follow-btn active");
       b.type = "button";
-      b.title = "Mantiene el mapa centrado en el camión. Se apaga solo si mueves el mapa.";
-      b.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2.5" fill="currentColor"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg><span>Seguir camión</span>';
+      b.title = "Mantiene el mapa centrado en el bus. Se apaga solo si mueves el mapa.";
+      b.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2.5" fill="currentColor"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg><span>Seguir bus</span>';
       L.DomEvent.disableClickPropagation(b);
       L.DomEvent.on(b, "click", () => setFollow(!followTruck));
       return b;
@@ -1180,7 +1219,7 @@
     loadRoutesTable();
   });
 
-  // ---------- Estado del camión ----------
+  // ---------- Estado del bus ----------
   const recentPoints = []; // últimas lecturas recibidas en vivo
   let lastMsgAt = 0;
   const lastRoute = { start: null, end: null }; // inicio y fin (gps_time) de la ruta más reciente
@@ -1191,7 +1230,7 @@
   }
 
   function showLastRoute() {
-    if (!lastRoute.end) { setTruckStatus("off", "Sin recorridos aún", "Esperando datos del camión"); return; }
+    if (!lastRoute.end) { setTruckStatus("off", "Sin recorridos aún", "Esperando datos del bus"); return; }
     const parts = [];
     const t0 = parseTime(lastRoute.start), t1 = parseTime(lastRoute.end);
     if (t0 !== null && t1 !== null && t1 >= t0) parts.push(fmtDuration(t1 - t0));
@@ -1202,7 +1241,7 @@
       parts.push(fmtDistance(d));
     }
     parts.push("última lectura " + fmtLast(lastRoute.end));
-    setTruckStatus("last", "Última ruta del camión", parts.join(" · "));
+    setTruckStatus("last", "Última ruta del bus", parts.join(" · "));
   }
 
   function setTruckStatus(state, title, sub) {
@@ -1226,15 +1265,15 @@
   let sseDown = false; // true si se cayó la conexión con el servidor
   function lastSeenAt() { return lastMsgAt || parseTime(lastRoute.end); }
 
-  // Indicador superior, "Recibida hace X" y aviso sobre el mapa cuando el camión deja de enviar datos
+  // Indicador superior, "Recibida hace X" y aviso sobre el mapa cuando el bus deja de enviar datos
   function updateSignalUI(fresh) {
     const seen = lastSeenAt();
     const ago = seen ? fmtAgo(Date.now() - seen) : null;
-    $("agoLine").innerHTML = seen ? `Recibida <b>${ago}</b>` : "Aún no hay datos del camión";
+    $("agoLine").innerHTML = seen ? `Recibida <b>${ago}</b>` : "Aún no hay datos del bus";
     if (!sseDown) {
       $("dot").classList.toggle("live", fresh);
       $("status").textContent = fresh ? `En vivo — último dato ${ago}`
-        : seen ? `Sin datos del camión · último ${ago}` : "Esperando datos del camión";
+        : seen ? `Sin datos del bus · último ${ago}` : "Esperando datos del bus";
     }
     const show = !fresh && view === "live";
     $("noDataAlert").classList.toggle("d-none", !show);
@@ -1318,6 +1357,7 @@
     updateFields(data);
     if (data.lat !== null && data.lon !== null) trackTruck(data.lat, data.lon, data);
     if (data.lat !== null && data.lon !== null && !historyMode) updateMap(data.lat, data.lon, true);
+    if (data.lat !== null && data.lon !== null) etaOnBusUpdate();
   };
 
   source.onopen = () => { sseDown = false; refreshTruckStatus(); };
@@ -1354,7 +1394,7 @@
     $("placeExtras").classList.remove("d-none");
   }
 
-  // Revisa si el camión tiene historial en la zona del resultado (usa el tamaño del lugar como radio).
+  // Revisa si el bus tiene historial en la zona del resultado (usa el tamaño del lugar como radio).
   function checkPlaceHistory(it, badge) {
     const lat = parseFloat(it.lat), lon = parseFloat(it.lon);
     let radius = PASSAGE_RADIUS_M;
@@ -1439,7 +1479,7 @@
         passageMarkers = [];
 
         if (data.passages.length === 0) {
-          banner.textContent = "El camión no pasó por ese punto" + (dateParams ? " en las fechas elegidas." : ".");
+          banner.textContent = "El bus no pasó por ese punto" + (dateParams ? " en las fechas elegidas." : ".");
         } else {
           const items = data.passages.map((p, i) => {
             passageMarkers.push(
@@ -1496,6 +1536,138 @@
   try { savedDark = localStorage.getItem("mapTheme") === "dark"; } catch (e) {}
   applyMapTheme(savedDark);
   $("mapThemeBtn").addEventListener("click", () => applyMapTheme(!document.body.classList.contains("map-dark")));
+
+  // ---------- Semana 2: ¿Cuándo llega el bus? (ubicación del usuario + tráfico) ----------
+  // La página pide permiso de ubicación al abrir. Con la ubicación, el servidor calcula
+  // cuánto tarda el bus en llegar hasta el usuario con el tráfico actual (/api/eta).
+  const ETA_REFRESH_MS = 30000;
+  const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
+  let clientId = null; // identificador anónimo del navegador, solo para contar visitantes
+  try {
+    clientId = localStorage.getItem("onrouteClient");
+    if (!clientId) {
+      clientId = window.crypto && crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + String(Math.random()).slice(2, 10);
+      localStorage.setItem("onrouteClient", clientId);
+    }
+  } catch (e) { clientId = null; }
+
+  function logUsage(event) {
+    fetch("/api/usage", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ event, client_id: clientId, device: isMobile ? "mobile" : "desktop" }),
+    }).catch(() => {});
+  }
+  logUsage("visit");
+
+  const userIcon = L.divIcon({ className: "", html: '<div class="user-pin"></div>', iconSize: [22, 22], iconAnchor: [11, 11] });
+  const userMarker = L.marker([0, 0], { icon: userIcon, zIndexOffset: 900, title: "Tu ubicación" });
+  const etaLine = L.polyline([], { color: "#ffd166", weight: 4, opacity: 0.85, dashArray: "8 8" });
+  let userPos = null, etaTimer = null, etaBusy = false, lastEtaAt = 0, etaFitted = false, geoWatch = null;
+  const geoLogged = {};
+
+  function logGeoOnce(event) { if (!geoLogged[event]) { geoLogged[event] = true; logUsage(event); } }
+
+  function setEta(state, main, sub, note) {
+    $("etaBox").dataset.state = state;
+    $("etaMain").textContent = main;
+    $("etaSub").innerHTML = sub;
+    $("etaNote").textContent = note || "";
+  }
+
+  function etaSetMapLayers(show) {
+    [userMarker, etaLine].forEach((layer) => {
+      if (show && userPos) { if (!map.hasLayer(layer)) layer.addTo(map); }
+      else if (map.hasLayer(layer)) map.removeLayer(layer);
+    });
+  }
+
+  const TREND_TXT = {
+    approaching: "se está acercando",
+    leaving: "se está alejando de ti",
+    stopped: "está detenido",
+  };
+
+  function showEta(d) {
+    if (d.error) { setEta("off", "--", d.error); return; }
+    if (d.status !== "ok") etaLine.setLatLngs([]);
+    if (d.status === "no_data") { setEta("off", "Sin datos", "El bus todavía no ha enviado su ubicación."); return; }
+    if (d.status === "offline") {
+      setEta("off", "Sin señal", `El bus no está enviando datos (último dato ${fmtAgo(d.age_s * 1000)}). El tiempo se calcula cuando vuelva a enviar.`);
+      return;
+    }
+    if (d.status === "here") { setEta("here", "¡Ya está aquí!", `El bus está a ${fmtDistance(d.straight_m)} de ti.`); return; }
+
+    const parts = [`A <b>${fmtDistance(d.distance_m)}</b> por la vía`];
+    if (d.source === "tomtom") parts.push(d.traffic_delay_s >= 60 ? `<b>+${Math.round(d.traffic_delay_s / 60)} min</b> por tráfico` : "tráfico normal");
+    if (TREND_TXT[d.trend]) parts.push(`el bus ${TREND_TXT[d.trend]}`);
+    setEta(d.trend === "leaving" ? "leaving" : "ok", `${d.eta_min} min`, parts.join(" · "),
+      d.source === "tomtom" ? "Con tráfico en tiempo real · se actualiza cada 30 s" : "Estimado sin datos de tráfico · se actualiza cada 30 s");
+    etaLine.setLatLngs(d.path || []);
+    etaSetMapLayers(view === "live");
+    if (!etaFitted && !historyMode && d.path && d.path.length) {
+      etaFitted = true;
+      setFollow(false);
+      map.fitBounds(L.latLngBounds(d.path).extend(marker.getLatLng()), { padding: [40, 40], maxZoom: 16 });
+    }
+  }
+
+  function requestEta() {
+    if (!userPos || etaBusy) return;
+    etaBusy = true;
+    lastEtaAt = Date.now();
+    fetch("/api/eta", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ lat: userPos.lat, lon: userPos.lon, client_id: clientId }),
+    })
+      .then((r) => r.json())
+      .then(showEta)
+      .catch(() => setEta("off", "--", "No se pudo calcular el tiempo de llegada. Se reintenta en 30 s."))
+      .finally(() => { etaBusy = false; });
+  }
+
+  function onUserPosition(pos) {
+    const first = !userPos;
+    userPos = { lat: pos.coords.latitude, lon: pos.coords.longitude };
+    userMarker.setLatLng([userPos.lat, userPos.lon]);
+    etaSetMapLayers(view === "live");
+    logGeoOnce("geo_granted");
+    $("etaBtn").classList.add("d-none");
+    if (first) setEta("wait", "Calculando…", "Ya tenemos tu ubicación.");
+    if (first || Date.now() - lastEtaAt > 15000) requestEta();
+    if (!etaTimer) etaTimer = setInterval(requestEta, ETA_REFRESH_MS);
+  }
+
+  function onUserError(err) {
+    if (userPos) return; // ya teníamos ubicación: un error pasajero no borra el cálculo
+    if (err.code === 1) {
+      logGeoOnce("geo_denied");
+      setEta("off", "Sin permiso", "No diste permiso de ubicación. Para ver cuánto tarda el bus en llegar a ti, permítelo desde el candado de la barra de direcciones y toca <b>Usar mi ubicación</b>.");
+    } else {
+      logGeoOnce("geo_unavailable");
+      setEta("off", "Sin ubicación", "No pudimos obtener tu ubicación. Revisa que la ubicación del celular esté encendida.");
+    }
+    $("etaBtn").classList.remove("d-none");
+  }
+
+  function startGeolocation() {
+    if (!window.isSecureContext || !navigator.geolocation) {
+      setEta("off", "No disponible", "Este navegador no permite usar tu ubicación en esta página (necesita https).");
+      return;
+    }
+    setEta("wait", "Buscando…", "Esperando tu ubicación. Si el navegador pregunta, toca <b>Permitir</b>.");
+    $("etaBtn").classList.add("d-none");
+    if (geoWatch !== null) navigator.geolocation.clearWatch(geoWatch);
+    geoWatch = navigator.geolocation.watchPosition(onUserPosition, onUserError,
+      { enableHighAccuracy: true, maximumAge: 15000, timeout: 20000 });
+  }
+
+  // Cuando llega una posición nueva del bus se recalcula (máximo cada 15 s)
+  function etaOnBusUpdate() {
+    if (userPos && Date.now() - lastEtaAt > 15000) requestEta();
+  }
+
+  $("etaBtn").addEventListener("click", startGeolocation);
+  startGeolocation(); // pide el permiso de ubicación al abrir la página
 
   setView("live");
 </script>

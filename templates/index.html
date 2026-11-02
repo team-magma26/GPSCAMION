@@ -552,6 +552,7 @@
   .adv-btn.dropdown-toggle::after { margin-left: 2px; transition: transform .2s; }
   .adv-btn.dropdown-toggle.show::after { transform: rotate(180deg); }
   .adv-menu {
+    --bs-dropdown-zindex: 1200; /* por encima de los botones del mapa (Leaflet usa z-index 1000) */
     --bs-dropdown-bg: #1f2e4a; --bs-dropdown-border-color: #4a6188; --bs-dropdown-border-radius: 18px;
     --bs-dropdown-padding-x: 10px; --bs-dropdown-padding-y: 10px; --bs-dropdown-link-color: var(--text);
     --bs-dropdown-link-hover-bg: var(--raise); --bs-dropdown-link-hover-color: var(--text);

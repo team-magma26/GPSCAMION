@@ -661,7 +661,7 @@
       <div id="etaPanel">
         <div class="panel-title px-1">¿Cuándo llega el bus?
           <button type="button" class="info-btn" data-bs-toggle="popover" aria-label="Más información"
-            data-bs-title="Tiempo de llegada" data-bs-content="Con tu ubicación calculamos cuánto tarda el bus en llegar hasta donde estás, por las calles y con el tráfico de este momento. Se actualiza cada 30 segundos. Tu ubicación no se guarda."></button>
+            data-bs-title="Tiempo de llegada" data-bs-content="Con tu ubicación calculamos cuánto tarda el bus en llegar hasta donde estás, por las calles y con el tráfico de este momento. Se actualiza cada 10 segundos. Tu ubicación no se guarda."></button>
         </div>
         <div class="eta-card" id="etaBox" data-state="wait">
           <div class="eta-top">
@@ -1811,7 +1811,7 @@
   // ---------- Semana 2: ¿Cuándo llega el bus? (ubicación del usuario + tráfico) ----------
   // La página pide permiso de ubicación al abrir. Con la ubicación, el servidor calcula
   // cuánto tarda el bus en llegar hasta el usuario con el tráfico actual (/api/eta).
-  const ETA_REFRESH_MS = 30000;
+  const ETA_REFRESH_MS = 10000; // igual que el bus, que envía su posición cada 10 s
   const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
   let clientId = null; // identificador anónimo del navegador, solo para contar visitantes
   try {
@@ -1902,7 +1902,7 @@
       clock: `Hacia las <b>${fmtClock(Date.now() + d.eta_s * 1000)}</b>`,
       facts,
       sub: leaving ? "El bus va en sentido contrario a ti; el tiempo incluye la vuelta." : "",
-      note: d.source === "tomtom" ? "Tráfico en tiempo real · se actualiza cada 30 s" : "Estimado sin tráfico · se actualiza cada 30 s",
+      note: d.source === "tomtom" ? "Tráfico en tiempo real · se actualiza cada 10 s" : "Estimado sin tráfico · se actualiza cada 10 s",
     });
     etaLine.setLatLngs(d.path || []);
     etaSetMapLayers(view === "live");
@@ -1923,7 +1923,7 @@
     })
       .then((r) => r.json())
       .then(showEta)
-      .catch(() => setEta("off", { chip: "Sin conexión", label: "Tu bus", num: "Reintentando…", textMain: true, sub: "No pudimos calcular el tiempo de llegada. Volvemos a intentar en 30 s." }))
+      .catch(() => setEta("off", { chip: "Sin conexión", label: "Tu bus", num: "Reintentando…", textMain: true, sub: "No pudimos calcular el tiempo de llegada. Volvemos a intentar en 10 s." }))
       .finally(() => { etaBusy = false; });
   }
 
@@ -1935,7 +1935,7 @@
     logGeoOnce("geo_granted");
     $("etaBtn").classList.add("d-none");
     if (first) setEta("wait", { chip: "Calculando", label: "Tu bus llega en", num: "Calculando…", textMain: true, sub: "Ya tenemos tu ubicación." });
-    if (first || Date.now() - lastEtaAt > 15000) requestEta();
+    if (first || Date.now() - lastEtaAt > 5000) requestEta();
     if (!etaTimer) etaTimer = setInterval(requestEta, ETA_REFRESH_MS);
   }
 
@@ -1967,9 +1967,9 @@
       { enableHighAccuracy: true, maximumAge: 15000, timeout: 20000 });
   }
 
-  // Cuando llega una posición nueva del bus se recalcula (máximo cada 15 s)
+  // Cuando llega una posición nueva del bus se recalcula (máximo cada 5 s)
   function etaOnBusUpdate() {
-    if (userPos && Date.now() - lastEtaAt > 15000) requestEta();
+    if (userPos && Date.now() - lastEtaAt > 5000) requestEta();
   }
 
   $("etaBtn").addEventListener("click", startGeolocation);

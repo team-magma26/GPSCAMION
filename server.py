@@ -68,7 +68,8 @@ TOMTOM_API_KEY = os.environ.get("TOMTOM_API_KEY", "").strip()
 ETA_FALLBACK_KMH = float(os.environ.get("ETA_FALLBACK_KMH", "22"))  # velocidad promedio del bus sin datos de tráfico
 ETA_BUS_MAX_AGE_S = 180      # si el último dato del bus es más viejo que esto, se considera sin señal
 ETA_HERE_M = 80              # a menos de esto, "el bus está donde estás"
-ETA_CACHE_S = 30             # misma consulta dentro de 30 s no vuelve a llamar a la API (cuida la cuota gratis)
+ETA_CACHE_S = 30             # TomTom se consulta máximo cada 30 s por zona del usuario (cuida la cuota gratis);
+                             # entre consultas el tiempo se ajusta según cuánto se acercó el bus
 _eta_cache = {}
 _eta_cache_lock = threading.Lock()
 
@@ -660,12 +661,20 @@ def estimate_eta(blat, blon, ulat, ulon, speed_kmh):
 
 
 def compute_eta(blat, blon, ulat, ulon, speed_kmh):
-    key = (round(blat, 4), round(blon, 4), round(ulat, 3), round(ulon, 3))
+    # La llave es solo la zona del usuario (~100 m): mientras el bus avanza no se
+    # vuelve a llamar a TomTom; el último resultado se escala con la distancia
+    # en línea recta que le queda al bus (si se acercó un 10 %, el tiempo baja un 10 %).
+    key = (round(ulat, 3), round(ulon, 3))
     now = time.time()
+    straight_now = haversine_m(blat, blon, ulat, ulon)
     with _eta_cache_lock:
         hit = _eta_cache.get(key)
-        if hit and now - hit[0] < ETA_CACHE_S:
-            return hit[1]
+    if hit and now - hit[0] < ETA_CACHE_S and hit[2] > 0:
+        seconds, meters, delay, path, source = hit[1]
+        ratio = min(max(straight_now / hit[2], 0.0), 1.5)
+        if path and len(path) > 1:
+            path = [(blat, blon)] + list(path[1:])
+        return (seconds * ratio, meters * ratio, delay * ratio, path, source)
     result = None
     if TOMTOM_API_KEY:
         try:
@@ -677,7 +686,7 @@ def compute_eta(blat, blon, ulat, ulon, speed_kmh):
     with _eta_cache_lock:
         if len(_eta_cache) > 500:
             _eta_cache.clear()
-        _eta_cache[key] = (now, result)
+        _eta_cache[key] = (now, result, straight_now)
     return result
 
 

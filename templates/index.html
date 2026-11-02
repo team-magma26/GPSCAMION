@@ -1341,6 +1341,24 @@
     },
   });
   const followBtn = new FollowControl().addTo(map).getContainer();
+  const MeControl = L.Control.extend({
+    options: { position: "topright" },
+    onAdd() {
+      const b = L.DomUtil.create("button", "map-follow-btn d-none");
+      b.type = "button";
+      b.id = "meBtn";
+      b.title = "Centrar el mapa en tu ubicación";
+      b.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4" fill="currentColor"/><circle cx="12" cy="12" r="8"/></svg><span>Mi ubicación</span>';
+      L.DomEvent.disableClickPropagation(b);
+      L.DomEvent.on(b, "click", () => {
+        if (!userPos) return;
+        setFollow(false);
+        map.setView([userPos.lat, userPos.lon], Math.max(map.getZoom(), 16));
+      });
+      return b;
+    },
+  });
+  new MeControl().addTo(map);
   function setFollow(on) {
     followTruck = on;
     followBtn.classList.toggle("active", on);
@@ -1929,9 +1947,21 @@
     userPos = { lat: pos.coords.latitude, lon: pos.coords.longitude };
     userMarker.setLatLng([userPos.lat, userPos.lon]);
     etaSetMapLayers(view === "live");
+    const meBtn = document.getElementById("meBtn");
+    if (meBtn) meBtn.classList.remove("d-none");
     logGeoOnce("geo_granted");
     $("etaBtn").classList.add("d-none");
-    if (first) setEta("wait", { chip: "Calculando", label: "Tu bus llega en", num: "Calculando…", textMain: true, sub: "Ya tenemos tu ubicación." });
+    if (first) {
+      setEta("wait", { chip: "Calculando", label: "Tu bus llega en", num: "Calculando…", textMain: true, sub: "Ya tenemos tu ubicación." });
+      // Muestra al usuario en el mapa junto con el bus (si el bus no tiene datos, centra en el usuario)
+      if (!historyMode) {
+        setFollow(false);
+        const busLL = marker.getLatLng();
+        const hasBus = busLL && (busLL.lat !== 4.6 || busLL.lng !== -74.08);
+        if (hasBus) map.fitBounds(L.latLngBounds([[userPos.lat, userPos.lon], [busLL.lat, busLL.lng]]), { padding: [60, 60], maxZoom: 16 });
+        else map.setView([userPos.lat, userPos.lon], 16);
+      }
+    }
     if (first || Date.now() - lastEtaAt > 5000) requestEta();
     if (!etaTimer) etaTimer = setInterval(requestEta, ETA_REFRESH_MS);
   }

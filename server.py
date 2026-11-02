@@ -1133,8 +1133,8 @@ def api_passages():
     mapa, según la hora real del GPS (gps_time). Parámetros (query string):
       lat, lon   = coordenadas del punto seleccionado (obligatorios)
       radius     = radio de búsqueda en metros (opcional, default 100)
-      start, end = 'YYYY-MM-DDTHH:MM' (opcionales, mismo formato que
-                   /api/history_range; si se omiten, busca en todo el historial)
+      start, end = 'YYYY-MM-DDTHH:MM' (obligatorios, mismo formato que
+                   /api/history_range)
       debug      = '1' (opcional) -> además de las pasadas, devuelve la sentencia SQL ejecutada
     """
     lat_param = request.args.get("lat")
@@ -1152,11 +1152,15 @@ def api_passages():
 
     start = request.args.get("start")
     end = request.args.get("end")
-    start_norm = (start.replace("T", " ") + ":00") if start else None
-    end_norm = (end.replace("T", " ") + ":59") if end else None
+    if not start or not end:  # la consulta por lugar siempre va acotada por fechas
+        return jsonify({"error": "Selecciona fecha y hora de inicio y fin"}), 400
+    start_norm = start.replace("T", " ") + ":00"
+    end_norm = end.replace("T", " ") + ":59"
 
-    if start_norm and start_norm > now_local().strftime("%Y-%m-%d %H:%M:%S"):
+    if start_norm > now_local().strftime("%Y-%m-%d %H:%M:%S"):
         return jsonify({"error": "La fecha/hora 'desde' no puede ser futura"}), 400
+    if start_norm > end_norm:
+        return jsonify({"error": "La fecha/hora 'desde' no puede ser posterior a 'hasta'"}), 400
 
     debug = request.args.get("debug") == "1"
 

@@ -767,7 +767,7 @@
               data-bs-title="Simular recorrido" data-bs-content="Reproduce la ruta como un video: el bus se mueve punto por punto. Arrastra la barra para saltar a otro momento y sube la velocidad si va muy lento."></button>
           </div>
           <select class="form-select form-select-sm mb-3" id="simRoute" aria-label="Ruta a simular"></select>
-          <input type="range" class="form-range" id="simSlider" min="0" max="1000" value="0" aria-label="Progreso del recorrido">
+          <input type="range" class="form-range" id="simSlider" min="0" max="0" step="1" value="0" aria-label="Punto del recorrido">
           <div class="muted mb-3" id="simInfo">--</div>
           <div class="d-flex gap-2 align-items-center">
             <button class="btn btn-accent btn-sm" id="simPlay">▶ Reproducir</button>
@@ -802,18 +802,18 @@
         <div class="point-chip d-none" id="pointChip"></div>
 
         <div class="d-none" id="placeExtras">
-          <div class="section-label">3. Fechas (opcional)
+          <div class="section-label">3. Fechas
             <button type="button" class="info-btn" data-bs-toggle="popover" aria-label="Más información"
-              data-bs-title="Fechas" data-bs-content="Si las dejas vacías se busca en todo el historial. Si pones una, debes poner las dos."></button>
+              data-bs-title="Fechas" data-bs-content="Elige desde qué fecha y hora hasta cuál quieres buscar las pasadas del bus. Las dos son obligatorias."></button>
           </div>
           <div class="row g-2">
             <div class="col-12 col-sm-6 col-lg-12">
               <label class="field-label" for="passStart">Desde</label>
-              <input type="datetime-local" class="form-control form-control-sm" id="passStart">
+              <input type="datetime-local" class="form-control form-control-sm" id="passStart" required aria-required="true">
             </div>
             <div class="col-12 col-sm-6 col-lg-12">
               <label class="field-label" for="passEnd">Hasta</label>
-              <input type="datetime-local" class="form-control form-control-sm" id="passEnd">
+              <input type="datetime-local" class="form-control form-control-sm" id="passEnd" required aria-required="true">
             </div>
           </div>
           <div class="d-flex gap-2 mt-3">
@@ -1276,16 +1276,16 @@
     if (!sim.route) return;
     const pts = sim.route.points;
     const n = pts.length;
-    const i = Math.min(Math.floor(sim.pos), n - 1);
-    const f = sim.pos - i;
+    // El slider avanza punto por punto (lecturas reales del GPS), sin posiciones intermedias inventadas
+    const i = Math.min(Math.max(Math.floor(sim.pos), 0), n - 1);
     const a = pts[i];
-    const b = pts[Math.min(i + 1, n - 1)];
-    const lat = a.lat + (b.lat - a.lat) * f;
-    const lon = a.lon + (b.lon - a.lon) * f;
+    const lat = a.lat, lon = a.lon;
 
     simMarker.setLatLng([lat, lon]);
-    simTrail.setLatLngs(pts.slice(0, i + 1).map((p) => [p.lat, p.lon]).concat([[lat, lon]]));
-    $("simSlider").value = n > 1 ? Math.round((sim.pos / (n - 1)) * 1000) : 0;
+    simTrail.setLatLngs(pts.slice(0, i + 1).map((p) => [p.lat, p.lon]));
+    $("simSlider").max = Math.max(n - 1, 0);
+    $("simSlider").value = i;
+    $("simSlider").setAttribute("aria-valuetext", `Punto ${i + 1} de ${n}, ${a.time}`);
     $("simInfo").textContent = `${a.time} · punto ${i + 1} de ${n}`;
     if (!map.getBounds().contains([lat, lon])) map.panTo([lat, lon]);
   }
@@ -1322,7 +1322,7 @@
   $("simRoute").addEventListener("change", (e) => setSimRoute(e.target.value));
   $("simSlider").addEventListener("input", (e) => {
     if (!sim.route) return;
-    sim.pos = (Number(e.target.value) / 1000) * (sim.route.points.length - 1);
+    sim.pos = Number(e.target.value); // índice del punto
     renderSim();
   });
 
@@ -1732,11 +1732,8 @@
 
     const start = $("passStart").value;
     const end = $("passEnd").value;
-    let dateParams = "";
-    if (start || end) {
-      if (!validateRange(start, end)) return;
-      dateParams = `&start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`;
-    }
+    if (!validateRange(start, end)) return; // las fechas son obligatorias
+    const dateParams = `&start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`;
 
     const { lat, lng } = placeMarker.getLatLng();
     const banner = $("passagesBanner");
@@ -1750,7 +1747,7 @@
         passageMarkers = [];
 
         if (data.passages.length === 0) {
-          banner.textContent = "El bus no pasó por ese punto" + (dateParams ? " en las fechas elegidas." : ".");
+          banner.textContent = "El bus no pasó por ese punto en las fechas elegidas.";
         } else {
           const items = data.passages.map((p, i) => {
             passageMarkers.push(

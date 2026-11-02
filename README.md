@@ -60,6 +60,9 @@ GPSCAMION/
 | `DB_PASSWORD` | Contraseña de la base | — |
 | `DB_SSLMODE` | Modo SSL de conexión | `require` |
 | `APP_NAME` | Nombre visible en la página | `- Truck Tracker` |
+| `TOMTOM_API_KEY` | Llave de la API de tráfico de TomTom para el tiempo de llegada (opcional: sin ella se usa un estimado) | — |
+| `ETA_FALLBACK_KMH` | Velocidad promedio del bus para el estimado sin tráfico (opcional) | `22` |
+| `METRICS_KEY` | Si tiene valor, la página `/metricas` solo abre con `?key=<valor>` (opcional) | — |
 
 ## Ejecución local
 
@@ -84,6 +87,10 @@ python3 server.py --role reader --http-port 8000
 | `/api/session` | GET | ID de la sesión/recorrido activo |
 | `/api/history` | GET | Historial de puntos de la sesión actual (hasta 1000) |
 | `/events` | GET | Stream de eventos en vivo (SSE) — actualizaciones de posición y avisos de nueva sesión |
+| `/api/eta` | POST | Tiempo de llegada del bus hasta el usuario. Cuerpo: `{"lat", "lon"}` del usuario (no se guarda). Usa TomTom con tráfico si hay `TOMTOM_API_KEY` |
+| `/api/usage` | POST | Registra eventos de uso de la página (visita, permiso de ubicación aceptado/rechazado) |
+| `/metricas` | GET | Página oculta de métricas (batería, señal, paquetes perdidos, operación del bus y uso de la página) |
+| `/api/metrics` | GET | Datos de la página de métricas. Parámetro `days` (1–31) |
 
 ## Formato del paquete UDP
 
@@ -92,6 +99,24 @@ El GPS envía un mensaje de texto plano con campos separados por `;`:
 ```
 Lat=4.60971;Lon=-74.08175;Time=2026-09-14 10:30:00
 ```
+
+El dispositivo ESP32 del bus agrega campos opcionales que se guardan para las métricas:
+
+```
+Id=bus1;Lat=11.004400;Lon=-74.807200;Time=2026-10-31 08:00:00;Seq=12;Bat=3.95;Sig=21
+```
+
+- `Seq`: contador de tramas (sirve para contar paquetes perdidos).
+- `Bat`: voltaje de la batería en voltios (se convierte a % en el servidor).
+- `Sig`: calidad de la señal celular (CSQ del módem, 0–31).
+
+## Tiempo de llegada (semana 2)
+
+La página pide permiso de ubicación al abrir. Con la ubicación del usuario y la última posición del bus, `/api/eta` calcula cuánto tarda el bus en llegar hasta el usuario con la [TomTom Routing API](https://developer.tomtom.com/routing-api/documentation) (`traffic=true`, `travelMode=bus`). Cada consulta igual se guarda 30 s en memoria para cuidar la cuota gratis. Si no hay llave o la API falla, se estima con distancia × 1.35 / velocidad del bus. La ubicación del usuario no se guarda en la base de datos. El navegador solo permite la ubicación en páginas `https`.
+
+## Métricas (semana 3)
+
+`/metricas` no tiene enlace en la página principal. Muestra batería, señal, paquetes perdidos y retraso de los datos del dispositivo; kilómetros, horas y recorridos del bus por día; y visitas, visitantes únicos, consultas de llegada y aceptación del permiso de ubicación de los usuarios.
 
 ## Sesiones / recorridos
 

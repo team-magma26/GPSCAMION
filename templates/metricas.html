@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="es" data-bs-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow">
+<title>Métricas · OnRoute</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  /* Estilo sobrio: superficies planas, un solo color de acento (azul del bus) y
+     colores de estado solo cuando significan algo (batería baja, pérdidas). */
+  :root {
+    --bg: #0f141b; --surface: #161d27; --surface2: #1c2531; --line: #263142; --line2: #334055;
+    --text: #e8edf3; --muted: #8b98a9; --faint: #5d6a7c;
+    --accent: #4c8dff; --good: #3fb27f; --warn: #d9a441; --bad: #e5484d;
+  }
+  * { box-sizing: border-box; }
+  body { font-family: 'Manrope', system-ui, sans-serif; font-size: 15px; color: var(--text); background: var(--bg); padding-bottom: 64px; }
+  .num, .big, .hero-num { font-variant-numeric: tabular-nums lining-nums; }
+
+  .topbar { position: sticky; top: 0; z-index: 20; background: rgba(15,20,27,.92); backdrop-filter: blur(8px); border-bottom: 1px solid var(--line); }
+  .brand { display: flex; align-items: center; min-width: 0; }
+  h1 { font-size: 1.25rem; font-weight: 700; margin: 0; letter-spacing: -.2px; color: var(--text); }
+  .brand-name { color: var(--accent); }
+  .sub { color: var(--muted); font-size: 13px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 2px; }
+  .live-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--good); }
+  .btn-back { display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 8px 14px; border-radius: 8px; font-weight: 600; font-size: 14px;
+    color: var(--text); background: transparent; border: 1px solid var(--line2); text-decoration: none; }
+  .btn-back:hover { color: var(--text); background: var(--surface2); }
+  .btn-back svg { width: 16px; height: 16px; }
+  .seg { display: inline-flex; border: 1px solid var(--line2); border-radius: 8px; overflow: hidden; }
+  .seg button { border: 0; background: transparent; color: var(--muted); font-weight: 600; font-size: 14px; padding: 8px 14px; min-height: 40px; }
+  .seg button + button { border-left: 1px solid var(--line2); }
+  .seg button:hover { color: var(--text); background: var(--surface2); }
+  .seg button.on { background: var(--surface2); color: var(--text); box-shadow: inset 0 -2px 0 var(--accent); }
+  .seg button:focus-visible, .btn-back:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin: 36px 0 12px; flex-wrap: wrap;
+    padding-bottom: 10px; border-bottom: 1px solid var(--line); }
+  h2 { font-size: 1.05rem; font-weight: 700; margin: 0; }
+  .section-desc { color: var(--muted); font-size: 13px; margin: 0; }
+
+  .card-m { height: 100%; padding: 16px 18px; border-radius: 10px; background: var(--surface); border: 1px solid var(--line); }
+  .card-top { display: block; }
+  .lbl { font-size: 13px; font-weight: 600; color: var(--muted); }
+  .big { font-size: 28px; font-weight: 700; line-height: 1.15; margin-top: 8px; letter-spacing: -.3px; }
+  .big small { font-size: 15px; font-weight: 600; color: var(--muted); margin-left: 3px; letter-spacing: 0; }
+  .small { font-size: 13px; color: var(--muted); margin-top: 4px; line-height: 1.45; }
+  .loading .big { color: transparent; width: 50%; border-radius: 4px; background: var(--surface2); }
+
+  .hero { height: 100%; padding: 20px; border-radius: 10px; background: var(--surface); border: 1px solid var(--line);
+    display: flex; flex-direction: column; justify-content: space-between; gap: 18px; }
+  .hero-row { display: flex; align-items: center; gap: 22px; flex-wrap: wrap; }
+  .ring { --p: 0; --rc: var(--accent); position: relative; width: 120px; height: 120px; flex-shrink: 0; border-radius: 50%;
+    background: conic-gradient(var(--rc) calc(var(--p) * 1%), var(--line) 0); display: grid; place-items: center; }
+  .ring::after { content: ""; position: absolute; inset: 9px; border-radius: 50%; background: var(--surface); }
+  .ring-in { position: relative; z-index: 1; text-align: center; }
+  .hero-num { font-size: 30px; font-weight: 700; line-height: 1; }
+  .ring-lbl { font-size: 12px; color: var(--muted); margin-top: 4px; }
+  .status-pill { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 600; color: var(--muted); }
+  .status-pill i { width: 8px; height: 8px; border-radius: 50%; background: var(--faint); }
+  .status-pill.on { color: var(--text); }
+  .status-pill.on i { background: var(--good); }
+  .hero-title { font-size: 20px; font-weight: 700; margin: 8px 0 4px; }
+  .bars { display: inline-flex; align-items: flex-end; gap: 2px; height: 16px; vertical-align: -1px; margin-right: 8px; }
+  .bars i { width: 4px; border-radius: 1px; background: var(--line2); }
+  .bars i:nth-child(1) { height: 25%; } .bars i:nth-child(2) { height: 50%; } .bars i:nth-child(3) { height: 75%; } .bars i:nth-child(4) { height: 100%; }
+  .bars i.on { background: var(--text); }
+  .hero-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0; border-top: 1px solid var(--line); padding-top: 14px; }
+  .fact + .fact { border-left: 1px solid var(--line); padding-left: 16px; }
+  .fact b { display: block; font-size: 16px; font-weight: 700; }
+  .fact span { font-size: 12.5px; color: var(--muted); }
+
+  .panel { height: 100%; padding: 16px 18px; border-radius: 10px; background: var(--surface); border: 1px solid var(--line); }
+  .panel-h { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
+  .panel h3 { font-size: 14.5px; font-weight: 700; margin: 0; }
+  .panel .hint { font-size: 12.5px; color: var(--muted); }
+  .chart-box { position: relative; height: 230px; }
+  .empty { display: grid; place-items: center; height: 100%; color: var(--muted); font-size: 14px; text-align: center; padding: 0 20px; }
+  .table { --bs-table-bg: transparent; margin: 0; font-size: 14px; color: var(--text); }
+  .table th { color: var(--muted); font-size: 12.5px; font-weight: 600; white-space: nowrap; }
+  .table td, .table th { border-color: var(--line); font-variant-numeric: tabular-nums; padding-top: 9px; padding-bottom: 9px; }
+  .note { border: 1px solid var(--line2); border-left: 3px solid var(--warn); border-radius: 8px; padding: 10px 14px; font-size: 13.5px; margin-top: 14px;
+    display: flex; gap: 10px; align-items: flex-start; background: var(--surface); }
+  .note svg { width: 16px; height: 16px; color: var(--warn); flex-shrink: 0; margin-top: 2px; }
+  @media (min-width: 1200px) { .hero-row { flex: 1; } }
+  @media (max-width: 575px) { .big { font-size: 24px; } .ring { width: 100px; height: 100px; } .hero-num { font-size: 24px; } }
+  /* Componentes de Bootstrap (.card, .table) con el tema de la página */
+  :root, [data-bs-theme=dark] {
+    --bs-primary: #4c8dff; --bs-primary-rgb: 76,141,255; --bs-danger: #e5484d; --bs-success: #3fb27f;
+    --bs-body-font-family: 'Manrope', system-ui, sans-serif; --bs-body-bg: var(--bg); --bs-body-color: var(--text);
+  }
+  .card.card-m, .card.panel { display: block; --bs-card-bg: var(--surface); --bs-card-border-color: var(--line); --bs-card-border-radius: 10px; color: var(--text); }
+  .card.hero { --bs-card-bg: var(--surface); --bs-card-border-color: var(--line); --bs-card-border-radius: 10px; color: var(--text); }
+  .table-hover > tbody > tr:hover > * { --bs-table-bg-state: rgba(76,141,255,.06); color: var(--text); }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="container-fluid px-3 px-lg-4 py-3 d-flex flex-wrap align-items-center gap-3">
+    <div class="brand flex-grow-1">
+      <div style="min-width:0">
+        <h1><span class="brand-name">OnRoute</span> Métricas</h1>
+        <div class="sub"><span class="live-dot" aria-hidden="true"></span><span>{{ app_name }}</span><span aria-hidden="true" class="d-none d-sm-inline">·</span><span id="updated">cargando…</span></div>
+      </div>
+    </div>
+    <div class="seg" role="group" aria-label="Periodo">
+      <button type="button" data-days="1" aria-pressed="false">Hoy</button>
+      <button type="button" data-days="7" class="on" aria-pressed="true">7 días</button>
+      <button type="button" data-days="30" aria-pressed="false">30 días</button>
+    </div>
+    <a class="btn-back" href="/">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
+      Volver al mapa
+    </a>
+  </div>
+</header>
+
+<main class="container-fluid px-3 px-lg-4 loading" id="main">
+
+  <!-- ================= DISPOSITIVO ================= -->
+  <div class="section-head">
+    <h2>Dispositivo en el bus</h2>
+    <p class="section-desc">Cómo está el rastreador: batería, señal y calidad de los datos.</p>
+  </div>
+  <div class="row g-3">
+    <div class="col-12 col-xl-5">
+      <div class="card hero">
+        <div class="hero-row">
+          <div class="ring" id="batRing" role="img" aria-label="Batería">
+            <div class="ring-in"><div class="hero-num" id="mBat">--</div><div class="ring-lbl">batería</div></div>
+          </div>
+          <div style="flex:1;min-width:180px">
+            <span class="status-pill" id="mStatusPill"><i></i><span id="mStatus">--</span></span>
+            <div class="hero-title" id="mBatTitle">Batería</div>
+            <div class="small" id="mBatSub">--</div>
+            <div class="small" id="mLastSeen">--</div>
+          </div>
+        </div>
+        <div class="hero-facts">
+          <div class="fact"><b><span class="bars" id="sigBars" aria-hidden="true"><i></i><i></i><i></i><i></i></span><span id="mSig">--</span></b><span id="mSigSub">señal celular</span></div>
+          <div class="fact"><b id="mLat">--</b><span id="mLatSub">retraso de los datos</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="col-12 col-xl-7">
+      <div class="row g-3 h-100">
+        <div class="col-6"><div class="card card-m">
+          <div class="card-top"><span class="lbl">Ubicaciones recibidas</span></div>
+          <div class="big" id="mRecv">--</div><div class="small">en el periodo elegido</div></div></div>
+        <div class="col-6"><div class="card card-m">
+          <div class="card-top"><span class="lbl">Paquetes perdidos</span></div>
+          <div class="big" id="mLoss">--</div><div class="small" id="mLossSub">--</div></div></div>
+        <div class="col-12"><div class="card panel">
+          <div class="panel-h"><h3>Ubicaciones recibidas por hora</h3><span class="hint">últimas 24 h · deberían ser ~360 por hora</span></div>
+          <div class="chart-box" style="height:170px"><canvas id="chPk"></canvas></div></div></div>
+      </div>
+    </div>
+  </div>
+  <div class="note d-none" id="extrasNote"></div>
+  <div class="row g-3 mt-1">
+    <div class="col-12 col-xl-6"><div class="card panel"><div class="panel-h"><h3>Batería</h3><span class="hint">últimas 24 h</span></div><div class="chart-box"><canvas id="chBat"></canvas></div></div></div>
+    <div class="col-12 col-xl-6"><div class="card panel"><div class="panel-h"><h3>Señal celular</h3><span class="hint">últimas 24 h · más alto es mejor</span></div><div class="chart-box"><canvas id="chSig"></canvas></div></div></div>
+  </div>
+
+  <!-- ================= OPERACIÓN ================= -->
+  <div class="section-head">
+    <h2>Operación del bus</h2>
+    <p class="section-desc">Cuánto se movió el bus según las ubicaciones que envió.</p>
+  </div>
+  <div class="row g-3">
+    <div class="col-6 col-lg-3"><div class="card card-m">
+      <div class="card-top"><span class="lbl">Distancia</span></div>
+      <div class="big" id="oKm">--</div><div class="small">recorrida en el periodo</div></div></div>
+    <div class="col-6 col-lg-3"><div class="card card-m">
+      <div class="card-top"><span class="lbl">Tiempo en ruta</span></div>
+      <div class="big" id="oH">--</div><div class="small">con datos, en movimiento o detenido</div></div></div>
+    <div class="col-6 col-lg-3"><div class="card card-m">
+      <div class="card-top"><span class="lbl">Recorridos</span></div>
+      <div class="big" id="oTrips">--</div><div class="small">uno termina tras 1 min sin datos</div></div></div>
+    <div class="col-6 col-lg-3"><div class="card card-m">
+      <div class="card-top"><span class="lbl">Velocidad promedio</span></div>
+      <div class="big" id="oAvg">--</div><div class="small" id="oMax">--</div></div></div>
+  </div>
+  <div class="row g-3 mt-1">
+    <div class="col-12 col-xl-5"><div class="card panel"><div class="panel-h"><h3>Kilómetros por día</h3></div><div class="chart-box"><canvas id="chKm"></canvas></div></div></div>
+    <div class="col-12 col-xl-7"><div class="card panel"><div class="panel-h"><h3>Detalle por día</h3><span class="hint">más reciente primero</span></div>
+      <div class="table-responsive"><table class="table table-sm table-hover align-middle">
+        <thead><tr><th>Fecha</th><th>Recorridos</th><th>Km</th><th>Horas</th><th>Vel. prom.</th><th>Vel. máx.</th><th>Ubicaciones</th><th>Perdidas</th></tr></thead>
+        <tbody id="oTable"></tbody>
+      </table></div></div></div>
+  </div>
+
+  <!-- ================= USUARIOS ================= -->
+  <div class="section-head">
+    <h2>Usuarios de la página</h2>
+    <p class="section-desc">Quién usa OnRoute y para qué.</p>
+  </div>
+  <div class="row g-3">
+    <div class="col-6 col-lg"><div class="card card-m">
+      <div class="card-top"><span class="lbl">Visitas</span></div>
+      <div class="big" id="uVisits">--</div><div class="small">veces que se abrió la página</div></div></div>
+    <div class="col-6 col-lg"><div class="card card-m">
+      <div class="card-top"><span class="lbl">Visitantes únicos</span></div>
+      <div class="big" id="uUnique">--</div><div class="small">navegadores distintos</div></div></div>
+    <div class="col-6 col-lg"><div class="card card-m">
+      <div class="card-top"><span class="lbl">Consultas de llegada</span></div>
+      <div class="big" id="uEta">--</div><div class="small" id="uEtaSub">--</div></div></div>
+    <div class="col-6 col-lg"><div class="card card-m">
+      <div class="card-top"><span class="lbl">Aceptan ubicación</span></div>
+      <div class="big" id="uGeo">--</div><div class="small" id="uGeoSub">--</div></div></div>
+    <div class="col-12 col-lg"><div class="card card-m">
+      <div class="card-top"><span class="lbl">Desde el celular</span></div>
+      <div class="big" id="uDev">--</div><div class="small" id="uDevSub">--</div></div></div>
+  </div>
+  <div class="note d-none" id="usageNote"></div>
+  <div class="row g-3 mt-1">
+    <div class="col-12 col-xl-7"><div class="card panel"><div class="panel-h"><h3>Visitas y consultas por día</h3></div><div class="chart-box"><canvas id="chVisits"></canvas></div></div></div>
+    <div class="col-12 col-xl-5"><div class="card panel"><div class="panel-h"><h3>¿A qué hora usan la página?</h3><span class="hint">visitas por hora del día</span></div><div class="chart-box"><canvas id="chHour"></canvas></div></div></div>
+  </div>
+</main>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+  const KEY = {{ key|tojson }};
+  let days = 7;
+  const charts = {};
+  const C = { accent: "#4c8dff", muted: "#5d6a7c", text: "#e8edf3", bad: "#e5484d", grid: "rgba(38,49,66,.9)" };
+  const WARN_ICO = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>';
+
+  Chart.defaults.color = "#8b98a9";
+  Chart.defaults.borderColor = C.grid;
+  Chart.defaults.font.family = "Manrope, system-ui, sans-serif";
+  Chart.defaults.font.size = 12;
+  Chart.defaults.plugins.legend.labels.boxWidth = 10;
+  Chart.defaults.plugins.legend.labels.usePointStyle = false;
+  if (Chart.defaults.plugins.tooltip) Object.assign(Chart.defaults.plugins.tooltip, { backgroundColor: "#1c2531", borderColor: "#334055", borderWidth: 1, padding: 8, cornerRadius: 6, titleFont: { weight: "600" } });
+
+  const fmt = (n, d = 0) => n === null || n === undefined ? "--" : Number(n).toLocaleString("es-CO", { maximumFractionDigits: d, minimumFractionDigits: d });
+  const hhmm = (t) => t ? t.slice(11, 16) : "";
+  const dayLbl = (d) => { const [, m, dd] = d.split("-"); return `${dd}/${m}`; };
+  const fade = (hex, a) => hex + Math.round(a * 255).toString(16).padStart(2, "0");
+  // Relleno degradado para gráficas de área
+  const gradFill = (hex) => (ctx) => {
+    const { chart } = ctx; const { ctx: c, chartArea } = chart;
+    if (!chartArea) return fade(hex, .2);
+    const g = c.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
+    g.addColorStop(0, fade(hex, .14)); g.addColorStop(1, fade(hex, 0));
+    return g;
+  };
+
+  function agoText(ts, now) {
+    if (!ts) return "nunca";
+    const s = Math.max(0, (new Date(now.replace(" ", "T")) - new Date(ts.replace(" ", "T"))) / 1000);
+    if (s < 60) return `hace ${Math.round(s)} s`;
+    if (s < 3600) return `hace ${Math.round(s / 60)} min`;
+    if (s < 86400) return `hace ${Math.round(s / 3600)} h`;
+    return `hace ${Math.round(s / 86400)} días`;
+  }
+
+  function chart(id, config, hasData, emptyMsg) {
+    const canvas = $(id);
+    const box = canvas.parentElement;
+    if (charts[id]) { charts[id].destroy(); delete charts[id]; }
+    box.querySelectorAll(".empty").forEach((e) => e.remove());
+    canvas.classList.toggle("d-none", !hasData);
+    if (!hasData) { box.insertAdjacentHTML("beforeend", `<div class="empty">${emptyMsg}</div>`); return; }
+    config.options = Object.assign({ responsive: true, maintainAspectRatio: false, animation: { duration: 400 },
+      interaction: { mode: "index", intersect: false } }, config.options || {});
+    charts[id] = new Chart(canvas, config);
+  }
+
+  function signalInfo(csq) {
+    if (csq === null || csq === undefined) return { txt: "Sin dato", bars: 0, c: "var(--muted)" };
+    if (csq >= 20) return { txt: "Excelente", bars: 4, c: "var(--live)" };
+    if (csq >= 15) return { txt: "Buena", bars: 3, c: "var(--live)" };
+    if (csq >= 10) return { txt: "Regular", bars: 2, c: "var(--warn)" };
+    return { txt: "Débil", bars: 1, c: "var(--bad)" };
+  }
+
+  function note(id, html) {
+    $(id).innerHTML = html ? WARN_ICO + `<div>${html}</div>` : "";
+    $(id).classList.toggle("d-none", !html);
+  }
+
+  function render(m) {
+    const d = m.device, q = m.quality, o = m.operation, u = m.usage;
+    $("main").classList.remove("loading");
+    $("updated").textContent = `actualizado ${hhmm(m.generated_at)} · se renueva cada minuto`;
+
+    // ---- Dispositivo ----
+    $("mStatusPill").classList.toggle("on", d.online);
+    $("mStatus").textContent = d.online ? "En línea" : "Sin conexión";
+    $("mLastSeen").textContent = d.last_seen ? `Último dato ${agoText(d.last_seen, m.generated_at)} (${d.last_seen.slice(5, 16).replace("-", "/")})` : "Todavía no ha enviado datos";
+    const pct = d.battery_pct;
+    const rc = pct === null ? "var(--line2)" : pct > 40 ? "var(--accent)" : pct > 15 ? "var(--warn)" : "var(--bad)";
+    $("batRing").style.setProperty("--p", pct || 0);
+    $("batRing").style.setProperty("--rc", rc);
+    $("batRing").setAttribute("aria-label", pct === null ? "Batería sin dato" : `Batería ${pct} por ciento`);
+    $("mBat").textContent = pct === null ? "--" : `${pct}%`;
+    $("mBatTitle").textContent = pct === null ? "Batería sin medir" : pct > 40 ? "Batería bien" : pct > 15 ? "Batería media" : "Batería baja";
+    $("mBatSub").textContent = d.battery_v === null ? "El dispositivo aún no envía el voltaje."
+      : `${fmt(d.battery_v, 2)} V` + (d.battery_hours_left ? ` · quedan ~${fmt(d.battery_hours_left, 1)} h` : "");
+
+    const si = signalInfo(d.signal_csq);
+    document.querySelectorAll("#sigBars i").forEach((b, i) => b.classList.toggle("on", i < si.bars));
+    
+    $("mSig").textContent = si.txt;
+    $("mSigSub").textContent = d.signal_csq === null ? "señal celular" : `señal · ${d.signal_dbm} dBm (CSQ ${d.signal_csq})`;
+    $("mLat").textContent = q.latency_median_s === null ? "--" : `${fmt(q.latency_median_s, 1)} s`;
+    $("mLatSub").textContent = q.latency_p95_s === null ? "retraso GPS → servidor" : `retraso típico · 95 % < ${fmt(q.latency_p95_s, 1)} s`;
+    $("mRecv").textContent = fmt(q.received);
+    $("mLoss").innerHTML = q.loss_pct === null ? "--" : `${fmt(q.loss_pct, 1)}<small>%</small>`;
+    $("mLossSub").textContent = `${fmt(q.lost)} de ${fmt(q.received + q.lost)} no llegaron`;
+
+    let n1 = "";
+    if (!d.extras_enabled) n1 = "La base de datos aún no tiene las columnas de batería y señal: reinicia el writer con el código nuevo.";
+    else if (d.battery_v === null && d.signal_csq === null && q.received > 0) n1 = "Llegan ubicaciones pero sin batería ni señal: carga el firmware nuevo en la ESP32 (envía <b>Bat=</b> y <b>Sig=</b>).";
+    note("extrasNote", n1);
+
+    chart("chPk", {
+      type: "bar",
+      data: { labels: m.hourly_packets.map((h) => h.hour.slice(11, 13) + "h"),
+        datasets: [{ label: "Ubicaciones", data: m.hourly_packets.map((h) => h.packets), backgroundColor: C.accent, borderRadius: 2, maxBarThickness: 16 }] },
+      options: { scales: { y: { beginAtZero: true, ticks: { precision: 0 }, grid: { color: C.grid } }, x: { grid: { display: false }, ticks: { maxTicksLimit: 12 } } }, plugins: { legend: { display: false } } },
+    }, m.hourly_packets.some((h) => h.packets > 0), "No llegaron ubicaciones en las últimas 24 h");
+
+    chart("chBat", {
+      type: "line",
+      data: { labels: m.battery_series.map((b) => hhmm(b.t)),
+        datasets: [{ label: "Batería", data: m.battery_series.map((b) => b.pct), borderColor: C.accent, backgroundColor: gradFill(C.accent), fill: true, pointRadius: 0, borderWidth: 2, tension: .2 }] },
+      options: { scales: { y: { min: 0, max: 100, ticks: { callback: (v) => v + " %" }, grid: { color: C.grid } }, x: { grid: { display: false }, ticks: { maxTicksLimit: 8 } } },
+        plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => ` ${c.parsed.y} %` } } } },
+    }, m.battery_series.length > 0, "Sin datos de batería en las últimas 24 h");
+
+    chart("chSig", {
+      type: "line",
+      data: { labels: m.signal_series.map((s) => hhmm(s.t)),
+        datasets: [{ label: "Señal", data: m.signal_series.map((s) => s.dbm), borderColor: C.text, backgroundColor: "transparent", fill: false, pointRadius: 0, borderWidth: 1.5, tension: .2 }] },
+      options: { scales: { y: { suggestedMin: -113, suggestedMax: -51, ticks: { callback: (v) => v + " dBm" }, grid: { color: C.grid } }, x: { grid: { display: false }, ticks: { maxTicksLimit: 8 } } },
+        plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => ` ${c.parsed.y} dBm` } } } },
+    }, m.signal_series.length > 0, "Sin datos de señal en las últimas 24 h");
+
+    // ---- Operación ----
+    $("oKm").innerHTML = `${fmt(o.total_km, 1)}<small>km</small>`;
+    $("oH").innerHTML = `${fmt(o.total_active_h, 1)}<small>h</small>`;
+    $("oTrips").textContent = fmt(o.total_trips);
+    const avg = o.total_active_h > 0.01 ? o.total_km / o.total_active_h : null;
+    $("oAvg").innerHTML = avg === null ? "--" : `${fmt(avg, 1)}<small>km/h</small>`;
+    const maxes = o.days.map((x) => x.max_kmh).filter((x) => x);
+    $("oMax").textContent = maxes.length ? `máxima ${fmt(Math.max(...maxes), 0)} km/h` : "sin movimiento registrado";
+
+    const rows = [...o.days].reverse().filter((x) => x.points > 0);
+    $("oTable").innerHTML = rows.length ? rows.map((x) => `<tr><td><b>${dayLbl(x.date)}</b></td><td>${x.trips}</td><td>${fmt(x.km, 1)}</td><td>${fmt(x.active_h, 1)}</td>
+      <td>${x.avg_kmh === null ? "--" : fmt(x.avg_kmh, 1) + " km/h"}</td><td>${x.max_kmh === null ? "--" : fmt(x.max_kmh, 0) + " km/h"}</td>
+      <td>${fmt(x.points)}</td><td>${x.lost ? `<span style="color:var(--bad)">${fmt(x.lost)}</span>` : "0"}</td></tr>`).join("")
+      : `<tr><td colspan="8" class="text-center py-4" style="color:var(--muted)">Sin datos del bus en el periodo</td></tr>`;
+
+    chart("chKm", {
+      type: "bar",
+      data: { labels: o.days.map((x) => dayLbl(x.date)),
+        datasets: [{ label: "Km", data: o.days.map((x) => x.km), backgroundColor: C.accent, borderRadius: 2, maxBarThickness: 32 }] },
+      options: { scales: { y: { beginAtZero: true, ticks: { callback: (v) => v + " km" }, grid: { color: C.grid } }, x: { grid: { display: false } } },
+        plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => ` ${fmt(c.parsed.y, 1)} km` } } } },
+    }, o.days.some((x) => x.km > 0), "El bus no ha recorrido distancia en el periodo");
+
+    // ---- Usuarios ----
+    $("uVisits").textContent = fmt(u.total_visits);
+    $("uUnique").textContent = fmt(u.unique_visitors);
+    $("uEta").textContent = fmt(u.eta_queries);
+    $("uEtaSub").textContent = u.eta_avg_min === null ? "tiempos de llegada calculados" : `llegada promedio: ${fmt(u.eta_avg_min, 1)} min`;
+    $("uGeo").innerHTML = u.geo_accept_pct === null ? "--" : `${u.geo_accept_pct}<small>%</small>`;
+    $("uGeoSub").textContent = `${fmt(u.geo.geo_granted)} permiten · ${fmt(u.geo.geo_denied)} rechazan`;
+    const devTotal = u.devices.mobile + u.devices.desktop;
+    $("uDev").innerHTML = devTotal ? `${Math.round(u.devices.mobile / devTotal * 100)}<small>%</small>` : "--";
+    $("uDevSub").textContent = `${fmt(u.devices.mobile)} celular · ${fmt(u.devices.desktop)} computador`;
+    note("usageNote", u.enabled ? "" : "La tabla de uso todavía no existe: reinicia el writer con el código nuevo para empezar a contar visitas.");
+
+    chart("chVisits", {
+      data: { labels: u.days.map((x) => dayLbl(x.date)), datasets: [
+        { type: "bar", label: "Visitas", data: u.days.map((x) => x.visits), backgroundColor: C.accent, borderRadius: 2, maxBarThickness: 24, order: 2 },
+        { type: "bar", label: "Consultas de llegada", data: u.days.map((x) => x.eta), backgroundColor: C.muted, borderRadius: 2, maxBarThickness: 24, order: 2 },
+        { type: "line", label: "Visitantes únicos", data: u.days.map((x) => x.visitors), borderColor: C.text, backgroundColor: C.text, borderWidth: 1.5, pointRadius: 2.5, tension: .2, order: 1 },
+      ] },
+      options: { scales: { y: { beginAtZero: true, ticks: { precision: 0 }, grid: { color: C.grid } }, x: { grid: { display: false } } }, plugins: { legend: { position: "bottom" } } },
+    }, u.days.some((x) => x.visits || x.eta), "Todavía nadie ha abierto la página en el periodo");
+
+    const maxH = Math.max(...u.visits_by_hour);
+    chart("chHour", {
+      type: "bar",
+      data: { labels: u.visits_by_hour.map((_, h) => `${h}h`),
+        datasets: [{ label: "Visitas", data: u.visits_by_hour, borderRadius: 2,
+          backgroundColor: u.visits_by_hour.map((v) => v === maxH && v > 0 ? C.accent : C.muted) }] },
+      options: { scales: { y: { beginAtZero: true, ticks: { precision: 0 }, grid: { color: C.grid } }, x: { grid: { display: false }, ticks: { maxTicksLimit: 12 } } }, plugins: { legend: { display: false } } },
+    }, u.visits_by_hour.some((x) => x > 0), "Sin visitas en el periodo");
+  }
+
+  function load() {
+    const q = new URLSearchParams({ days });
+    if (KEY) q.set("key", KEY);
+    fetch(`/api/metrics?${q}`)
+      .then((r) => r.json())
+      .then((m) => { if (m.error) throw new Error(m.error); render(m); })
+      .catch(() => { $("updated").textContent = "no se pudieron cargar las métricas"; });
+  }
+
+  document.querySelectorAll(".seg button").forEach((b) => b.addEventListener("click", () => {
+    document.querySelectorAll(".seg button").forEach((x) => { x.classList.toggle("on", x === b); x.setAttribute("aria-pressed", String(x === b)); });
+    days = Number(b.dataset.days);
+    load();
+  }));
+  load();
+  setInterval(load, 60000);
+</script>
+</body>
+</html>

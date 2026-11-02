@@ -89,6 +89,14 @@
   .note svg { width: 16px; height: 16px; color: var(--warn); flex-shrink: 0; margin-top: 2px; }
   @media (min-width: 1200px) { .hero-row { flex: 1; } }
   @media (max-width: 575px) { .big { font-size: 24px; } .ring { width: 100px; height: 100px; } .hero-num { font-size: 24px; } }
+  /* Componentes de Bootstrap (.card, .table) con el tema de la página */
+  :root, [data-bs-theme=dark] {
+    --bs-primary: #4c8dff; --bs-primary-rgb: 76,141,255; --bs-danger: #e5484d; --bs-success: #3fb27f;
+    --bs-body-font-family: 'Manrope', system-ui, sans-serif; --bs-body-bg: var(--bg); --bs-body-color: var(--text);
+  }
+  .card.card-m, .card.panel { display: block; --bs-card-bg: var(--surface); --bs-card-border-color: var(--line); --bs-card-border-radius: 10px; color: var(--text); }
+  .card.hero { --bs-card-bg: var(--surface); --bs-card-border-color: var(--line); --bs-card-border-radius: 10px; color: var(--text); }
+  .table-hover > tbody > tr:hover > * { --bs-table-bg-state: rgba(76,141,255,.06); color: var(--text); }
 </style>
 </head>
 <body>
@@ -122,7 +130,7 @@
   </div>
   <div class="row g-3">
     <div class="col-12 col-xl-5">
-      <div class="hero">
+      <div class="card hero">
         <div class="hero-row">
           <div class="ring" id="batRing" role="img" aria-label="Batería">
             <div class="ring-in"><div class="hero-num" id="mBat">--</div><div class="ring-lbl">batería</div></div>
@@ -142,13 +150,13 @@
     </div>
     <div class="col-12 col-xl-7">
       <div class="row g-3 h-100">
-        <div class="col-6"><div class="card-m">
+        <div class="col-6"><div class="card card-m">
           <div class="card-top"><span class="lbl">Ubicaciones recibidas</span></div>
           <div class="big" id="mRecv">--</div><div class="small">en el periodo elegido</div></div></div>
-        <div class="col-6"><div class="card-m">
+        <div class="col-6"><div class="card card-m">
           <div class="card-top"><span class="lbl">Paquetes perdidos</span></div>
           <div class="big" id="mLoss">--</div><div class="small" id="mLossSub">--</div></div></div>
-        <div class="col-12"><div class="panel">
+        <div class="col-12"><div class="card panel">
           <div class="panel-h"><h3>Ubicaciones recibidas por hora</h3><span class="hint">últimas 24 h · deberían ser ~360 por hora</span></div>
           <div class="chart-box" style="height:170px"><canvas id="chPk"></canvas></div></div></div>
       </div>
@@ -156,8 +164,8 @@
   </div>
   <div class="note d-none" id="extrasNote"></div>
   <div class="row g-3 mt-1">
-    <div class="col-12 col-xl-6"><div class="panel"><div class="panel-h"><h3>Batería</h3><span class="hint">últimas 24 h</span></div><div class="chart-box"><canvas id="chBat"></canvas></div></div></div>
-    <div class="col-12 col-xl-6"><div class="panel"><div class="panel-h"><h3>Señal celular</h3><span class="hint">últimas 24 h · más alto es mejor</span></div><div class="chart-box"><canvas id="chSig"></canvas></div></div></div>
+    <div class="col-12 col-xl-6"><div class="card panel"><div class="panel-h"><h3>Batería</h3><span class="hint">últimas 24 h</span></div><div class="chart-box"><canvas id="chBat"></canvas></div></div></div>
+    <div class="col-12 col-xl-6"><div class="card panel"><div class="panel-h"><h3>Señal celular</h3><span class="hint">últimas 24 h · más alto es mejor</span></div><div class="chart-box"><canvas id="chSig"></canvas></div></div></div>
   </div>
 
   <!-- ================= OPERACIÓN ================= -->
@@ -166,23 +174,23 @@
     <p class="section-desc">Cuánto se movió el bus según las ubicaciones que envió.</p>
   </div>
   <div class="row g-3">
-    <div class="col-6 col-lg-3"><div class="card-m">
+    <div class="col-6 col-lg-3"><div class="card card-m">
       <div class="card-top"><span class="lbl">Distancia</span></div>
       <div class="big" id="oKm">--</div><div class="small">recorrida en el periodo</div></div></div>
-    <div class="col-6 col-lg-3"><div class="card-m">
+    <div class="col-6 col-lg-3"><div class="card card-m">
       <div class="card-top"><span class="lbl">Tiempo en ruta</span></div>
       <div class="big" id="oH">--</div><div class="small">con datos, en movimiento o detenido</div></div></div>
-    <div class="col-6 col-lg-3"><div class="card-m">
+    <div class="col-6 col-lg-3"><div class="card card-m">
       <div class="card-top"><span class="lbl">Recorridos</span></div>
       <div class="big" id="oTrips">--</div><div class="small">uno termina tras 1 min sin datos</div></div></div>
-    <div class="col-6 col-lg-3"><div class="card-m">
+    <div class="col-6 col-lg-3"><div class="card card-m">
       <div class="card-top"><span class="lbl">Velocidad promedio</span></div>
       <div class="big" id="oAvg">--</div><div class="small" id="oMax">--</div></div></div>
   </div>
   <div class="row g-3 mt-1">
-    <div class="col-12 col-xl-5"><div class="panel"><div class="panel-h"><h3>Kilómetros por día</h3></div><div class="chart-box"><canvas id="chKm"></canvas></div></div></div>
-    <div class="col-12 col-xl-7"><div class="panel"><div class="panel-h"><h3>Detalle por día</h3><span class="hint">más reciente primero</span></div>
-      <div class="table-responsive"><table class="table table-sm align-middle">
+    <div class="col-12 col-xl-5"><div class="card panel"><div class="panel-h"><h3>Kilómetros por día</h3></div><div class="chart-box"><canvas id="chKm"></canvas></div></div></div>
+    <div class="col-12 col-xl-7"><div class="card panel"><div class="panel-h"><h3>Detalle por día</h3><span class="hint">más reciente primero</span></div>
+      <div class="table-responsive"><table class="table table-sm table-hover align-middle">
         <thead><tr><th>Fecha</th><th>Recorridos</th><th>Km</th><th>Horas</th><th>Vel. prom.</th><th>Vel. máx.</th><th>Ubicaciones</th><th>Perdidas</th></tr></thead>
         <tbody id="oTable"></tbody>
       </table></div></div></div>
@@ -194,26 +202,26 @@
     <p class="section-desc">Quién usa OnRoute y para qué.</p>
   </div>
   <div class="row g-3">
-    <div class="col-6 col-lg"><div class="card-m">
+    <div class="col-6 col-lg"><div class="card card-m">
       <div class="card-top"><span class="lbl">Visitas</span></div>
       <div class="big" id="uVisits">--</div><div class="small">veces que se abrió la página</div></div></div>
-    <div class="col-6 col-lg"><div class="card-m">
+    <div class="col-6 col-lg"><div class="card card-m">
       <div class="card-top"><span class="lbl">Visitantes únicos</span></div>
       <div class="big" id="uUnique">--</div><div class="small">navegadores distintos</div></div></div>
-    <div class="col-6 col-lg"><div class="card-m">
+    <div class="col-6 col-lg"><div class="card card-m">
       <div class="card-top"><span class="lbl">Consultas de llegada</span></div>
       <div class="big" id="uEta">--</div><div class="small" id="uEtaSub">--</div></div></div>
-    <div class="col-6 col-lg"><div class="card-m">
+    <div class="col-6 col-lg"><div class="card card-m">
       <div class="card-top"><span class="lbl">Aceptan ubicación</span></div>
       <div class="big" id="uGeo">--</div><div class="small" id="uGeoSub">--</div></div></div>
-    <div class="col-12 col-lg"><div class="card-m">
+    <div class="col-12 col-lg"><div class="card card-m">
       <div class="card-top"><span class="lbl">Desde el celular</span></div>
       <div class="big" id="uDev">--</div><div class="small" id="uDevSub">--</div></div></div>
   </div>
   <div class="note d-none" id="usageNote"></div>
   <div class="row g-3 mt-1">
-    <div class="col-12 col-xl-7"><div class="panel"><div class="panel-h"><h3>Visitas y consultas por día</h3></div><div class="chart-box"><canvas id="chVisits"></canvas></div></div></div>
-    <div class="col-12 col-xl-5"><div class="panel"><div class="panel-h"><h3>¿A qué hora usan la página?</h3><span class="hint">visitas por hora del día</span></div><div class="chart-box"><canvas id="chHour"></canvas></div></div></div>
+    <div class="col-12 col-xl-7"><div class="card panel"><div class="panel-h"><h3>Visitas y consultas por día</h3></div><div class="chart-box"><canvas id="chVisits"></canvas></div></div></div>
+    <div class="col-12 col-xl-5"><div class="card panel"><div class="panel-h"><h3>¿A qué hora usan la página?</h3><span class="hint">visitas por hora del día</span></div><div class="chart-box"><canvas id="chHour"></canvas></div></div></div>
   </div>
 </main>
 

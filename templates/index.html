@@ -8,7 +8,7 @@
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Sora:wght@500;600;700;800&family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700;12..96,800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700;12..96,800&family=Outfit:wght@500;600;700;800&family=Work+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -85,8 +85,6 @@
   }
   .form-control::placeholder { color: var(--muted); }
   .btn { border-radius: 10px; font-weight: 700; font-size: 14px; }
-  .btn-accent { background: var(--accent); color: #0d1b2a; border: 0; }
-  .btn-accent:hover, .btn-accent:focus { background: var(--accent); color: #0d1b2a; filter: brightness(1.1); }
   .btn-quiet { background: var(--raise); color: var(--text); border: 1px solid var(--line); }
   .btn-quiet:hover { background: #33456a; color: #fff; }
   .btn:disabled { opacity: .35; }
@@ -184,8 +182,6 @@
 
   .btn { font-weight: 600; letter-spacing: .1px; transition: transform .15s, box-shadow .2s, filter .2s, background .2s; }
   .btn:not(:disabled):hover { transform: translateY(-1px); }
-  .btn-accent { background: var(--grad); box-shadow: 0 6px 16px color-mix(in srgb, var(--accent) 28%, transparent); }
-  .btn-accent:hover, .btn-accent:focus { background: var(--grad); box-shadow: 0 8px 20px color-mix(in srgb, var(--accent) 40%, transparent); }
   .form-control, .form-select { background-color: rgba(13,27,42,.55); }
   .notice { border-radius: 14px; }
   .point-chip { padding: 7px 14px; }
@@ -550,19 +546,23 @@
   .live-chip i { width: 9px; height: 9px; border-radius: 50%; background: var(--live); animation: pulse 2s ease-in-out infinite; }
   .back-live { min-height: 44px; display: inline-flex; align-items: center; gap: 8px; }
   .back-live svg, .adv-btn svg { width: 18px; height: 18px; }
-  .adv-wrap { position: relative; margin-left: auto; }
+  .adv-wrap { margin-left: auto; }
   .adv-btn { min-height: 44px; display: inline-flex; align-items: center; gap: 8px; padding: 8px 16px; }
   .adv-btn[aria-expanded=true], .adv-btn.on { border-color: var(--accent); color: var(--accent); }
-  .adv-btn .chev { width: 14px; height: 14px; transition: transform .2s; }
-  .adv-btn[aria-expanded=true] .chev { transform: rotate(180deg); }
+  .adv-btn.dropdown-toggle::after { margin-left: 2px; transition: transform .2s; }
+  .adv-btn.dropdown-toggle.show::after { transform: rotate(180deg); }
   .adv-menu {
-    position: absolute; right: 0; top: calc(100% + 8px); z-index: 1100; width: min(320px, calc(100vw - 32px)); padding: 10px;
-    border-radius: 18px; background: #1f2e4a; border: 1px solid #4a6188; box-shadow: 0 18px 44px rgba(0,0,0,.5);
+    --bs-dropdown-bg: #1f2e4a; --bs-dropdown-border-color: #4a6188; --bs-dropdown-border-radius: 18px;
+    --bs-dropdown-padding-x: 10px; --bs-dropdown-padding-y: 10px; --bs-dropdown-link-color: var(--text);
+    --bs-dropdown-link-hover-bg: var(--raise); --bs-dropdown-link-hover-color: var(--text);
+    --bs-dropdown-link-active-bg: var(--raise); --bs-dropdown-link-active-color: var(--text);
+    --bs-dropdown-header-color: var(--muted); --bs-dropdown-header-padding-x: 10px; --bs-dropdown-header-padding-y: 4px;
+    width: min(320px, calc(100vw - 32px)); box-shadow: 0 18px 44px rgba(0,0,0,.5); margin-top: 8px !important;
   }
   .adv-title { font-size: 11.5px; font-weight: 700; letter-spacing: 1.4px; text-transform: uppercase; color: var(--muted); padding: 8px 10px 4px; }
   .adv-item {
-    width: 100%; display: flex; align-items: center; gap: 12px; padding: 10px; min-height: 52px; border: 0; border-radius: 12px;
-    background: transparent; color: var(--text); text-align: left; cursor: pointer; transition: background .15s;
+    display: flex; align-items: center; gap: 12px; padding: 10px; min-height: 52px; border-radius: 12px; white-space: normal;
+    transition: background .15s;
   }
   .adv-item:hover, .adv-item:focus-visible { background: var(--raise); outline: none; }
   .adv-item:focus-visible { box-shadow: 0 0 0 2px var(--accent); }
@@ -583,6 +583,82 @@
   /* En computador va arriba (junto al zoom) para que se vea sin hacer scroll; en celular queda abajo */
   @media (min-width: 992px) {
     .map-alert { top: 12px; bottom: auto; left: 58px; transform: none; width: min(560px, calc(100% - 270px)); }
+  }
+
+  /* ================= Tipografía y colores del bus (azul y rojo) ================= */
+  /* Título "OnRoute": se queda con Bricolage Grotesque. Todo lo demás: Outfit (títulos, números, botones) + Work Sans (texto). */
+  :root {
+    --bus-blue: #2f74e6; --bus-blue-d: #1b4fb5; --bus-red: #e5484d;
+    --accent: #6ea4ff;
+    --grad: linear-gradient(135deg, #4c8dff 0%, #1b4fb5 100%);
+  }
+  body {
+    font-family: 'Work Sans', system-ui, -apple-system, 'Segoe UI', Arial, sans-serif;
+    background:
+      radial-gradient(900px 500px at 95% -10%, rgba(47,116,230,.22), transparent 60%),
+      radial-gradient(700px 420px at -5% 105%, rgba(229,72,77,.10), transparent 60%),
+      var(--ink);
+    background-attachment: fixed;
+  }
+  .panel-title, .stat-value, .seg label, .btn, .ts-title, .eta-main, .eta-chip, .eta-label, .live-chip, .adv-item b, .adv-title,
+  .wl-title, .wl-route, .map-follow-btn, .stat-tile .stat-value, .route-endpoint, .status, .app-sub {
+    font-family: 'Outfit', 'Work Sans', system-ui, sans-serif;
+  }
+  .ts-title, .eta-main { letter-spacing: -.3px; }
+  .brand h1 { font-family: 'Bricolage Grotesque', 'Outfit', sans-serif; }
+
+  /* Barra superior con la franja del bus: azul, blanco y rojo */
+  .topbar { border-bottom: 0; }
+  .topbar::after { content: ""; display: block; height: 4px; background: linear-gradient(90deg, var(--bus-blue) 0 72%, #fff 72% 75%, var(--bus-red) 75% 100%); }
+  .logo { background: linear-gradient(180deg, #4c8dff 0%, var(--bus-blue-d) 60%, #fff 60%, #fff 67%, var(--bus-red) 67%); color: #fff; box-shadow: 0 8px 20px rgba(47,116,230,.4); }
+  .logo::after { border-color: rgba(76,141,255,.35); }
+
+  /* Botones y selección en azul del bus, con texto blanco */
+  .seg input:checked + label { color: #fff; }
+  .map-follow-btn.active { color: #fff; }
+  .panel-title::before { background: linear-gradient(180deg, var(--bus-blue) 0 62%, var(--bus-red) 62% 100%); }
+  .info-btn:hover, .info-btn[aria-describedby] { color: #fff; background: var(--bus-blue); border-color: var(--bus-blue); }
+  .adv-btn[aria-expanded=true], .adv-btn.on { border-color: var(--accent); color: var(--accent); }
+
+  /* Tarjeta de llegada: azul cuando viene en camino, verde al llegar, rojo si se aleja */
+  .eta-card[data-state=ok]      { --s: #4c8dff; }
+  .eta-card[data-state=wait]    { --s: #4c8dff; }
+  .eta-card[data-state=here]    { --s: #2ecc71; }
+  .eta-card[data-state=leaving] { --s: var(--bus-red); }
+  .eta-icon { color: #fff; }
+  .eta-unit { color: #8fb8ff; }
+  .eta-card[data-state=here] .eta-unit { color: var(--s); }
+
+  /* Tema de Bootstrap con los colores del bus (un solo lugar para cambiarlos) */
+  :root, [data-bs-theme=dark] {
+    --bs-primary: #2f74e6; --bs-primary-rgb: 47,116,230;
+    --bs-danger: #e5484d; --bs-danger-rgb: 229,72,77;
+    --bs-success: #2ecc71; --bs-success-rgb: 46,204,113;
+    --bs-link-color: #6ea4ff; --bs-link-hover-color: #9cc2ff; --bs-link-color-rgb: 110,164,255;
+    --bs-body-font-family: 'Work Sans', system-ui, -apple-system, 'Segoe UI', Arial, sans-serif;
+    --bs-border-radius: 10px;
+  }
+  .btn-primary {
+    --bs-btn-color: #fff; --bs-btn-bg: #2f74e6; --bs-btn-border-color: #2f74e6;
+    --bs-btn-hover-color: #fff; --bs-btn-hover-bg: #1b4fb5; --bs-btn-hover-border-color: #1b4fb5;
+    --bs-btn-active-color: #fff; --bs-btn-active-bg: #163c86; --bs-btn-active-border-color: #163c86;
+    --bs-btn-disabled-bg: #2f74e6; --bs-btn-disabled-border-color: #2f74e6;
+    --bs-btn-focus-shadow-rgb: 76,141,255;
+    background-image: var(--grad); border: 0; box-shadow: 0 6px 16px rgba(47,116,230,.3);
+  }
+  .btn-primary:hover { background-image: none; }
+  /* Las tarjetas son .card de Bootstrap; se dejan en bloque para no cambiar su contenido */
+  .card.panel, .card.eta-card, .card.welcome { display: block; --bs-card-bg: transparent; --bs-card-border-color: var(--line); color: var(--text); }
+  .card.panel { background: linear-gradient(180deg, rgba(43,62,98,.62), rgba(31,46,74,.96)); border-radius: 20px; }
+  .card.eta-card { border-radius: 22px; }
+  .card.welcome { border-radius: 24px; border-color: rgba(255,255,255,.18); }
+  .badge.eta-chip { font-size: 13px; font-weight: 700; padding: 6px 12px; line-height: 1.2; }
+
+  /* Mapa más grande */
+  .map { height: calc(100vh - 130px); min-height: 640px; }
+  @media (max-width: 991.98px) {
+    .map { height: 70vh; min-height: 420px; }
+    body[data-mode=live] #map { height: 66vh; min-height: 380px; }
   }
 </style>
 </head>
@@ -627,32 +703,31 @@
       <input type="radio" name="sub" id="subPlace"><label for="subPlace">Por lugar</label>
     </div>
 
-    <div class="adv-wrap">
-      <button type="button" class="btn btn-quiet adv-btn" id="advBtn" aria-expanded="false" aria-controls="advMenu" aria-haspopup="true">
+    <div class="dropdown adv-wrap">
+      <button type="button" class="btn btn-quiet adv-btn dropdown-toggle" id="advBtn" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg>
         Avanzado
-        <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
       </button>
-      <div class="adv-menu d-none" id="advMenu" role="menu" aria-label="Opciones avanzadas">
-        <div class="adv-title">Histórico</div>
-        <button type="button" class="adv-item" role="menuitem" data-go="routes">
+      <div class="dropdown-menu dropdown-menu-end adv-menu" id="advMenu" aria-labelledby="advBtn">
+        <h6 class="dropdown-header adv-title">Histórico</h6>
+        <button type="button" class="dropdown-item adv-item" data-go="routes">
           <span class="ai-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="19" r="2"/><circle cx="18" cy="5" r="2"/><path d="M8 19h7a4 4 0 0 0 0-8H9a4 4 0 0 1 0-8h7"/></svg></span>
           <span><b>Recorridos</b><small>Rutas que ya hizo el bus</small></span>
         </button>
-        <button type="button" class="adv-item" role="menuitem" data-go="place">
+        <button type="button" class="dropdown-item adv-item" data-go="place">
           <span class="ai-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg></span>
           <span><b>Por lugar</b><small>Cuándo pasó el bus por un punto</small></span>
         </button>
-        <div class="adv-title">Datos</div>
-        <button type="button" class="adv-item" role="menuitem" data-go="metrics">
+        <h6 class="dropdown-header adv-title">Datos</h6>
+        <button type="button" class="dropdown-item adv-item" data-go="metrics">
           <span class="ai-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg></span>
           <span><b>Métricas de uso</b><small>Batería, señal y visitas</small></span>
         </button>
-        <form class="adv-key d-none" id="advKeyForm">
+        <form class="adv-key d-none" id="advKeyForm" novalidate>
           <label for="advKey">Clave de métricas</label>
           <div class="input-group input-group-sm">
             <input type="password" class="form-control" id="advKey" autocomplete="off" required aria-describedby="advKeyMsg">
-            <button class="btn btn-accent" type="submit">Abrir</button>
+            <button class="btn btn-primary" type="submit">Abrir</button>
           </div>
           <div class="adv-msg" id="advKeyMsg" role="alert"></div>
         </form>
@@ -666,7 +741,7 @@
     <aside class="col-12 col-lg-3">
 
       <!-- BIENVENIDA (solo la primera vez que alguien abre la página) -->
-      <section class="welcome d-none" id="welcome" aria-labelledby="wlTitle">
+      <section class="card welcome d-none" id="welcome" aria-labelledby="wlTitle">
         <svg class="wl-bus" viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="1.5" width="17" height="17" rx="3.5" fill="currentColor"/><rect x="5.5" y="17" width="3.5" height="4.5" rx="1.2" fill="currentColor"/><rect x="15" y="17" width="3.5" height="4.5" rx="1.2" fill="currentColor"/></svg>
         <div class="wl-route"><i></i>Costa Azul<span class="line"></span><i></i>Puerto Colombia</div>
         <h2 class="wl-title" id="wlTitle">Sigue tu bus en tiempo real</h2>
@@ -688,12 +763,12 @@
           <button type="button" class="info-btn" data-bs-toggle="popover" aria-label="Más información"
             data-bs-title="Tiempo de llegada" data-bs-content="Con tu ubicación calculamos cuánto tarda el bus en llegar hasta donde estás, por las calles y con el tráfico de este momento. Se actualiza cada 10 segundos. Tu ubicación no se guarda."></button>
         </div>
-        <div class="eta-card" id="etaBox" data-state="wait">
+        <div class="card eta-card" id="etaBox" data-state="wait">
           <div class="eta-top">
             <span class="eta-icon" aria-hidden="true">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5.2 17.5H4a1 1 0 0 1-1-1V6.5A2.5 2.5 0 0 1 5.5 4h11A3.5 3.5 0 0 1 20 7.5l1 5.5v3.5a1 1 0 0 1-1 1h-1.2"/><path d="M9.2 17.5h5.6"/><path d="M3 12h18"/><path d="M8 4v8M13 4v8"/><circle cx="7.2" cy="17.6" r="2"/><circle cx="16.8" cy="17.6" r="2"/></svg>
             </span>
-            <span class="eta-chip" id="etaChip">Buscando</span>
+            <span class="badge rounded-pill eta-chip" id="etaChip">Buscando</span>
           </div>
           <div role="status" aria-live="polite" aria-atomic="true">
             <div class="eta-label" id="etaLabel">Tu bus llega en</div>
@@ -703,12 +778,12 @@
           <div class="eta-facts" id="etaFacts"></div>
           <div class="eta-sub" id="etaSub">Activa tu ubicación para saber cuánto tarda el bus en llegar a donde estás.</div>
           <div class="eta-note" id="etaNote"></div>
-          <button class="btn btn-accent w-100 d-none" id="etaBtn">Usar mi ubicación</button>
+          <button class="btn btn-primary w-100 d-none" id="etaBtn">Usar mi ubicación</button>
         </div>
       </div>
 
       <!-- EN VIVO -->
-      <div class="panel" id="livePanel">
+      <div class="card panel" id="livePanel">
         <div class="panel-title">En vivo
           <button type="button" class="info-btn" data-bs-toggle="popover" aria-label="Más información"
             data-bs-title="En vivo" data-bs-content="Muestra dónde está el bus ahora mismo. El mapa se actualiza solo. El estado indica si el bus está en movimiento o detenido. Si lleva más de 1 minuto sin enviar datos, muestra su última ruta."></button>
@@ -725,7 +800,7 @@
       </div>
 
       <!-- ÚLTIMA UBICACIÓN (solo en vivo) -->
-      <div class="panel" id="statsCard">
+      <div class="card panel" id="statsCard">
         <div class="panel-title">Última ubicación recibida</div>
         <div class="row g-2">
           <div class="col-6 col-lg-12 col-xl-6"><div class="stat-tile" style="--c:#f4a261">
@@ -742,7 +817,7 @@
       </div>
 
       <!-- HISTÓRICO: RECORRIDOS -->
-      <div class="panel d-none" id="routesPanel">
+      <div class="card panel d-none" id="routesPanel">
         <div class="panel-title">Recorridos
           <button type="button" class="info-btn" data-bs-toggle="popover" aria-label="Más información"
             data-bs-title="¿Qué es una ruta?" data-bs-content="Una ruta es un trayecto continuo del bus. Termina cuando pasa 1 minuto sin enviar datos, y el siguiente trayecto empieza como una ruta nueva. En el mapa, A es el inicio y B es el final. Marca las rutas que quieras ver."></button>
@@ -759,7 +834,7 @@
           </div>
         </div>
         <div class="d-flex gap-2 mt-3">
-          <button class="btn btn-accent btn-sm" id="filterRoutesByDate">Filtrar por fecha</button>
+          <button class="btn btn-primary btn-sm" id="filterRoutesByDate">Filtrar por fecha</button>
           <button class="btn btn-quiet btn-sm" id="clearFilter">Quitar filtro</button>
         </div>
 
@@ -795,7 +870,7 @@
           <input type="range" class="form-range" id="simSlider" min="0" max="0" step="1" value="0" aria-label="Punto del recorrido">
           <div class="muted mb-3" id="simInfo">--</div>
           <div class="d-flex gap-2 align-items-center">
-            <button class="btn btn-accent btn-sm" id="simPlay">▶ Reproducir</button>
+            <button class="btn btn-primary btn-sm" id="simPlay">▶ Reproducir</button>
             <button class="btn btn-quiet btn-sm" id="simReset" aria-label="Volver al inicio">⟲</button>
             <select class="form-select form-select-sm w-auto ms-auto" id="simSpeed" aria-label="Velocidad">
               <option value="1">1×</option><option value="2">2×</option><option value="5" selected>5×</option>
@@ -806,7 +881,7 @@
       </div>
 
       <!-- HISTÓRICO: POR LUGAR -->
-      <div class="panel d-none" id="placePanel">
+      <div class="card panel d-none" id="placePanel">
         <div class="panel-title">Buscar por lugar
           <button type="button" class="info-btn" data-bs-toggle="popover" aria-label="Más información"
             data-bs-title="Buscar por lugar" data-bs-content="Descubre cuándo pasó el bus por un punto. Cada pasada muestra la hora de entrada y de salida de la zona. Al buscar un lugar, cada resultado indica si el bus tiene historial ahí."></button>
@@ -815,7 +890,7 @@
         <div class="field-label">1. Ve a un lugar</div>
         <div class="input-group input-group-sm">
           <input type="text" class="form-control" id="placeQuery" placeholder="Ej: Cartagena, Bocagrande" aria-label="Buscar lugar">
-          <button class="btn btn-accent" id="placeSearchBtn">Buscar</button>
+          <button class="btn btn-primary" id="placeSearchBtn">Buscar</button>
         </div>
         <div class="list-group mt-2" id="placeResults"></div>
 
@@ -842,7 +917,7 @@
             </div>
           </div>
           <div class="d-flex gap-2 mt-3">
-            <button class="btn btn-accent btn-sm" id="searchPassages">Buscar pasadas</button>
+            <button class="btn btn-primary btn-sm" id="searchPassages">Buscar pasadas</button>
             <button class="btn btn-quiet btn-sm" id="clearPassages">Quitar punto</button>
           </div>
         </div>
@@ -873,7 +948,7 @@
   <div class="modal-dialog modal-dialog-centered modal-sm">
     <div class="modal-content" style="background:var(--surface);border:1px solid var(--line);border-radius:var(--r)">
       <div class="modal-body" id="modalMessage"></div>
-      <div class="modal-footer border-0 pt-0"><button class="btn btn-accent w-100" data-bs-dismiss="modal">Entendido</button></div>
+      <div class="modal-footer border-0 pt-0"><button class="btn btn-primary w-100" data-bs-dismiss="modal">Entendido</button></div>
     </div>
   </div>
 </div>
@@ -951,7 +1026,7 @@
     iconSize: [56, 62], iconAnchor: [28, 59],
   });
   const marker = L.marker([4.6, -74.08], { icon: mkIcon("") }).addTo(map);
-  const trail = L.polyline([], { color: "#2ecc71", weight: 4, opacity: 0.9 }).addTo(map);
+  const trail = L.polyline([], { color: "#4c8dff", weight: 5, opacity: 0.9 }).addTo(map);
 
   const routesLayer = L.layerGroup().addTo(map);
   const routesBySession = new Map(); // session_id -> { color, points, polyline, startMarker, endMarker, visible, loaded, loading }
@@ -1080,17 +1155,13 @@
   $("backLive").addEventListener("click", () => setView("live"));
 
   // ---------- Menú "Avanzado" (histórico y métricas) ----------
+  // Es un dropdown de Bootstrap: abrir, cerrar, Esc, clic afuera y flechas los maneja Bootstrap.
   const advBtn = $("advBtn"), advMenu = $("advMenu");
-  function setAdvOpen(open) {
-    advMenu.classList.toggle("d-none", !open);
-    advBtn.setAttribute("aria-expanded", String(open));
-    if (open) advMenu.querySelector(".adv-item").focus();
-    else $("advKeyForm").classList.add("d-none");
-  }
-  advBtn.addEventListener("click", () => setAdvOpen(advMenu.classList.contains("d-none")));
-  document.addEventListener("click", (e) => { if (!e.target.closest(".adv-wrap")) setAdvOpen(false); });
-  document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && !advMenu.classList.contains("d-none")) { setAdvOpen(false); advBtn.focus(); }
+  const advDropdown = bootstrap.Dropdown.getOrCreateInstance(advBtn);
+  function setAdvOpen(open) { if (open) advDropdown.show(); else advDropdown.hide(); }
+  advBtn.addEventListener("hidden.bs.dropdown", () => {
+    $("advKeyForm").classList.add("d-none");
+    $("advKeyMsg").textContent = "";
   });
   function openMetrics(key) {
     window.open(`/metricas${key ? "?key=" + encodeURIComponent(key) : ""}`, "_blank", "noopener");

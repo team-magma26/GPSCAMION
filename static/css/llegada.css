@@ -1,0 +1,160 @@
+/* OnRoute · Tarjeta "¿Cuándo llega el bus?", bienvenida, vista en celular y marcador del bus */
+
+/* ===== Semana 2: ¿Cuándo llega el bus? (tarjeta principal) ===== */
+.eta-card {
+  --s: var(--place); position: relative; overflow: hidden; padding: 22px 22px 20px; border-radius: 22px; margin-bottom: 20px;
+  background:
+    radial-gradient(120% 90% at 100% 0%, color-mix(in srgb, var(--s) 30%, transparent), transparent 60%),
+    linear-gradient(160deg, color-mix(in srgb, var(--s) 14%, #22365a) 0%, #172640 100%);
+  border: 1px solid color-mix(in srgb, var(--s) 45%, var(--line));
+  box-shadow: 0 16px 40px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.06);
+  transition: background .4s, border-color .4s;
+}
+.eta-card[data-state=ok]      { --s: var(--live); }
+.eta-card[data-state=here]    { --s: #ffd166; }
+.eta-card[data-state=leaving] { --s: var(--hist); }
+.eta-card[data-state=wait]    { --s: var(--place); }
+.eta-card[data-state=off]     { --s: #8a97ad; }
+.eta-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 18px; }
+.eta-icon {
+  position: relative; width: 48px; height: 48px; flex-shrink: 0; display: grid; place-items: center; border-radius: 16px;
+  color: #0d1b2a; background: var(--s); box-shadow: 0 8px 22px color-mix(in srgb, var(--s) 45%, transparent);
+}
+.eta-icon svg { width: 26px; height: 26px; }
+.eta-card[data-state=ok] .eta-icon::after, .eta-card[data-state=here] .eta-icon::after {
+  content: ""; position: absolute; inset: -4px; border-radius: 20px; border: 2px solid var(--s); animation: etaPing 2.2s ease-out infinite;
+}
+@keyframes etaPing { from { transform: scale(1); opacity: .7; } to { transform: scale(1.35); opacity: 0; } }
+.eta-chip {
+  display: inline-flex; align-items: center; gap: 7px; padding: 6px 12px; border-radius: 999px; font-size: 13px; font-weight: 700;
+  color: var(--s); background: color-mix(in srgb, var(--s) 14%, rgba(13,27,42,.6)); border: 1px solid color-mix(in srgb, var(--s) 40%, transparent);
+  white-space: nowrap;
+}
+.eta-chip::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.eta-label { font-size: 14px; font-weight: 600; color: var(--muted); }
+.eta-main {
+  display: flex; align-items: baseline; gap: 8px; margin-top: 2px;
+  font-family: 'Bricolage Grotesque', 'Sora', sans-serif; font-weight: 800; line-height: 1; color: #fff;
+  font-variant-numeric: lining-nums tabular-nums;
+}
+.eta-num { font-size: clamp(44px, 5.2vw, 60px); letter-spacing: -1.5px; }
+.eta-num.text { font-size: clamp(28px, 3vw, 34px); letter-spacing: -.5px; }
+.eta-unit { font-size: 22px; font-weight: 700; color: var(--s); }
+.eta-clock { font-size: 14px; color: var(--muted); margin-top: 6px; }
+.eta-clock b { color: var(--text); }
+.eta-clock:empty { display: none; }
+.eta-facts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+.eta-facts:empty { display: none; }
+.eta-fact {
+  display: inline-flex; align-items: center; gap: 6px; padding: 6px 11px; border-radius: 12px; font-size: 13.5px; font-weight: 600;
+  background: rgba(13,27,42,.55); border: 1px solid var(--line); color: var(--text);
+}
+.eta-fact svg { width: 15px; height: 15px; color: var(--muted); flex-shrink: 0; }
+.eta-fact.warn { border-color: color-mix(in srgb, var(--hist) 55%, var(--line)); }
+.eta-fact.warn svg { color: var(--hist); }
+.eta-sub { font-size: 14.5px; color: var(--muted); margin-top: 12px; line-height: 1.5; }
+.eta-sub b { color: var(--text); }
+.eta-sub:empty { display: none; }
+.eta-note { display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--muted); margin-top: 14px; opacity: .9; }
+.eta-note:empty { display: none; }
+.eta-card .btn { margin-top: 16px; min-height: 44px; }
+@media (prefers-reduced-motion: reduce) { .eta-card .eta-icon::after { animation: none; display: none; } }
+
+/* ===== Bienvenida para usuarios nuevos ===== */
+.welcome {
+  position: relative; overflow: hidden; padding: 24px 22px 22px; border-radius: 24px; margin-bottom: 22px; color: #fff;
+  background:
+    radial-gradient(90% 80% at 100% 0%, rgba(226,50,45,.35), transparent 60%),
+    linear-gradient(150deg, #2f74e6 0%, #1b4fb5 55%, #163c86 100%);
+  border: 1px solid rgba(255,255,255,.18); box-shadow: 0 20px 44px rgba(20,60,140,.45);
+}
+.welcome::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 6px;
+  background: linear-gradient(90deg, #fff 0 18%, #e2322d 18% 100%);
+}
+.wl-route { display: flex; align-items: center; gap: 8px; font: 700 12px 'Sora', sans-serif; letter-spacing: 1.2px; text-transform: uppercase; opacity: .9; }
+.wl-route i { width: 8px; height: 8px; border-radius: 50%; background: #fff; flex-shrink: 0; }
+.wl-route span.line { flex: 0 0 34px; height: 2px; background: repeating-linear-gradient(90deg, #fff 0 5px, transparent 5px 9px); }
+.wl-title { font: 800 clamp(1.6rem, 2.4vw, 1.9rem)/1.1 'Bricolage Grotesque', 'Sora', sans-serif; margin: 14px 0 8px; letter-spacing: -.5px; max-inline-size: 16ch; text-wrap: balance; }
+.wl-text { font-size: 15px; line-height: 1.5; color: rgba(255,255,255,.88); margin: 0 0 16px; }
+.wl-steps { list-style: none; padding: 0; margin: 0 0 18px; display: grid; gap: 8px; }
+.wl-steps li { display: flex; align-items: center; gap: 12px; padding: 9px 12px; border-radius: 14px; background: rgba(255,255,255,.12); font-weight: 600; font-size: 14.5px; }
+.wl-steps b { width: 26px; height: 26px; flex-shrink: 0; display: grid; place-items: center; border-radius: 50%; background: #fff; color: #1b4fb5; font: 800 13px 'Sora', sans-serif; }
+.wl-actions { display: flex; gap: 10px; }
+.wl-actions .btn { min-height: 46px; }
+.wl-go { flex: 1; background: #fff; color: #163c86; border: 0; box-shadow: 0 8px 20px rgba(0,0,0,.25); }
+.wl-go:hover, .wl-go:focus { background: #fff; color: #163c86; filter: brightness(.96); }
+.wl-skip { background: rgba(255,255,255,.14); color: #fff; border: 1px solid rgba(255,255,255,.3); }
+.wl-skip:hover { background: rgba(255,255,255,.22); color: #fff; }
+.wl-bus { position: absolute; right: -6px; top: 16px; width: 92px; height: 92px; opacity: .22; color: #fff; pointer-events: none; }
+body:not([data-mode=live]) #welcome { display: none !important; }
+
+/* Entrada suave de los paneles al abrir la página */
+@keyframes riseIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+aside > * { animation: riseIn .45s ease-out both; }
+aside > *:nth-child(2) { animation-delay: .06s; } aside > *:nth-child(3) { animation-delay: .12s; } aside > *:nth-child(4) { animation-delay: .18s; }
+@media (prefers-reduced-motion: reduce) { aside > * { animation: none; } }
+
+/* ===== Celular en vivo: primero el mapa, luego el tiempo de llegada y lo demás ===== */
+@media (max-width: 991.98px) {
+  body[data-mode=live] main .row.g-4 > aside { display: contents; }
+  body[data-mode=live] main .row.g-4 > aside > * {
+    order: 4; flex: 0 0 auto; width: calc(100% - var(--bs-gutter-x));
+    margin-left: calc(var(--bs-gutter-x) * .5); margin-right: calc(var(--bs-gutter-x) * .5);
+    margin-top: var(--bs-gutter-y);
+  }
+  body[data-mode=live] #welcome { order: 1; margin-bottom: 0; }
+  /* Aviso de "sin datos" más pequeño para no tapar el mapa */
+  .map-alert { bottom: 12px; padding: 9px 12px; font-size: 13px; gap: 8px; }
+  .map-alert b { font-size: 14px; }
+  body[data-mode=live] main .row.g-4 > section { order: 2; }
+  body[data-mode=live] #etaPanel { order: 3; }
+  body[data-mode=live] #map { height: 58vh; min-height: 340px; }
+  body[data-mode=live] main .mode-bar { margin-bottom: .75rem !important; }
+  /* Bienvenida compacta en celular */
+  .welcome { padding: 18px 18px 20px; border-radius: 20px; }
+  .wl-title { font-size: 1.45rem; margin: 10px 0 6px; }
+  .wl-text { font-size: 14px; margin-bottom: 14px; }
+  .wl-steps { display: none; }
+  .wl-bus { width: 70px; height: 70px; top: 12px; }
+}
+
+/* ===== Marcador del bus en el mapa ===== */
+.bus-marker { --b1: #2f74e6; --b2: #1b4fb5; --red: #e2322d; --bd: #12398a; position: relative; width: 56px; height: 62px; }
+/* Colores del bus Costa Azul: azul arriba, franja blanca y rojo abajo */
+.bus-marker.sim { --b1: #ffb470; --b2: #e07a2a; --red: #e07a2a; --bd: #8a4510; }
+.bm-pin {
+  position: absolute; left: 4px; top: 0; width: 48px; height: 48px; display: grid; place-items: center; border-radius: 16px;
+  background: linear-gradient(180deg, var(--b1) 0%, var(--b2) 60%, #fff 60%, #fff 67%, var(--red) 67%, color-mix(in srgb, var(--red) 80%, #000) 100%);
+  border: 3px solid #fff;
+  box-shadow: 0 6px 16px rgba(0,0,0,.45), 0 0 0 1px rgba(0,0,0,.15);
+}
+.bm-pin svg { width: 28px; height: 28px; color: var(--bd); filter: drop-shadow(0 1px 0 rgba(0,0,0,.15)); }
+.bm-tip {
+  position: absolute; left: 50%; top: 36px; width: 18px; height: 18px; margin-left: -9px; transform: rotate(45deg);
+  background: var(--red); border-right: 3px solid #fff; border-bottom: 3px solid #fff; border-radius: 0 0 5px 0;
+  box-shadow: 3px 3px 6px rgba(0,0,0,.3);
+}
+.bm-ground {
+  position: absolute; left: 50%; bottom: 0; width: 14px; height: 5px; margin-left: -7px; border-radius: 50%;
+  background: rgba(0,0,0,.4);
+}
+.bm-pulse {
+  position: absolute; left: 50%; bottom: -6px; width: 18px; height: 18px; margin-left: -9px; border-radius: 50%;
+  border: 3px solid var(--b1); opacity: 0; animation: bmPulse 2.4s ease-out infinite;
+}
+.bus-marker.sim .bm-pulse { display: none; }
+@keyframes bmPulse { 0% { transform: scale(.6); opacity: .9; } 100% { transform: scale(3.2); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .bm-pulse { animation: none; display: none; } }
+
+/* Etiqueta con el nombre del bus ("Bus de Luis") encima del marcador */
+.leaflet-tooltip.bus-tag {
+  background: #fff; color: #12398a; border: 2px solid #2f74e6; border-radius: 999px;
+  padding: 2px 10px; font: 700 13px/1.3 "Outfit", system-ui, sans-serif; white-space: nowrap;
+  box-shadow: 0 3px 10px rgba(0,0,0,.35);
+}
+.leaflet-tooltip.bus-tag::before { border-top-color: #2f74e6; }
+
+/* Ruta y bus en la bienvenida */
+.wl-who { font-weight: 700; font-size: 14px; color: #fff; opacity: .92; margin: 4px 0 6px; }
+.brand .route-name { color: #fff; font-weight: 700; }

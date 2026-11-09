@@ -1,0 +1,241 @@
+/* OnRoute · Diseño: título, tarjetas, estado del bus, búsqueda y ajustes de la encuesta */
+
+/* ================= Diseño mejorado ================= */
+:root { --grad: linear-gradient(135deg, #a8dcf0 0%, #5aa9d6 100%); --shadow: 0 12px 32px rgba(0,0,0,.28); }
+h1, .panel-title, .stat-value, .seg label, .btn { font-family: 'Sora', 'Manrope', system-ui, sans-serif; }
+body {
+  background:
+    radial-gradient(900px 500px at 95% -10%, color-mix(in srgb, var(--accent) 18%, transparent), transparent),
+    radial-gradient(700px 420px at -5% 105%, color-mix(in srgb, #5aa9d6 12%, transparent), transparent),
+    var(--ink);
+  background-attachment: fixed;
+}
+.topbar { position: sticky; top: 0; z-index: 1020; box-shadow: 0 6px 28px rgba(0,0,0,.3); }
+.logo { background: var(--grad); color: #0d1b2a; border: 0; box-shadow: 0 8px 20px color-mix(in srgb, var(--accent) 40%, transparent); }
+h1 { font-weight: 700; letter-spacing: -.3px; background: linear-gradient(90deg, #fff 30%, var(--accent)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.status { background: rgba(36,51,80,.6); backdrop-filter: blur(6px); }
+.dot.live { animation: pulse 2s ease-in-out infinite; }
+@keyframes pulse { 0%,100% { box-shadow: 0 0 0 3px rgba(46,204,113,.22); } 50% { box-shadow: 0 0 0 7px rgba(46,204,113,.05); } }
+
+.seg { background: rgba(27,38,59,.8); box-shadow: inset 0 1px 0 rgba(255,255,255,.04); }
+.seg label { font-weight: 600; letter-spacing: .1px; }
+.seg input:checked + label { background: var(--grad); box-shadow: 0 4px 14px color-mix(in srgb, var(--accent) 35%, transparent); }
+
+.panel {
+  background: linear-gradient(180deg, rgba(36,51,80,.55), rgba(27,38,59,.92));
+  border-radius: 20px; box-shadow: var(--shadow); padding: 22px;
+  transition: border-color .25s, transform .25s;
+}
+.panel:hover { border-color: color-mix(in srgb, var(--accent) 40%, var(--line)); }
+.panel-title { font-weight: 700; font-size: 15px; letter-spacing: .1px; }
+.panel-title::before { width: 5px; height: 20px; border-radius: 3px; background: var(--grad); }
+
+.btn { font-weight: 600; letter-spacing: .1px; transition: transform .15s, box-shadow .2s, filter .2s, background .2s; }
+.btn:not(:disabled):hover { transform: translateY(-1px); }
+.form-control, .form-select { background-color: rgba(13,27,42,.55); }
+.notice { border-radius: 14px; }
+.point-chip { padding: 7px 14px; }
+.routes-table tbody tr { transition: background .15s; }
+.routes-table tbody tr:hover { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+
+.map { border-radius: 22px; border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--line)); box-shadow: var(--shadow); }
+.leaflet-control-zoom { border: 0 !important; box-shadow: 0 6px 18px rgba(0,0,0,.3) !important; border-radius: 12px !important; overflow: hidden; }
+.leaflet-control-zoom a { background: var(--surface) !important; color: var(--text) !important; border-color: var(--line) !important; }
+.leaflet-control-zoom a:hover { background: var(--raise) !important; }
+.leaflet-popup-content-wrapper { border-radius: 14px; box-shadow: 0 10px 28px rgba(0,0,0,.4); }
+
+#statsCard .stat-value { font-weight: 700; font-size: 19px; }
+#mapThemeBtn { white-space: nowrap; }
+
+/* ===== Título ===== */
+.logo { width: 58px; height: 58px; border-radius: 18px; position: relative; }
+.logo::after { content: ""; position: absolute; inset: -6px; border-radius: 22px; border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent); }
+.logo svg { width: 30px; height: 30px; }
+.brand { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-width: 0; }
+.tagline { font-size: 10.5px; font-weight: 700; letter-spacing: 2.2px; text-transform: uppercase; color: var(--accent); opacity: .85; }
+.brand h1 {
+  font-size: clamp(1.7rem, 3.2vw, 2.4rem); font-weight: 800; letter-spacing: -.8px; line-height: 1.1; padding-bottom: 2px;
+  background: linear-gradient(100deg, #ffffff 0%, #bfe6f5 30%, #8ecae6 55%, #7fe3a8 80%, #ffffff 100%);
+  background-size: 220% auto; -webkit-background-clip: text; background-clip: text; color: transparent;
+  animation: shimmer 8s linear infinite;
+}
+@keyframes shimmer { to { background-position: 220% center; } }
+@media (prefers-reduced-motion: reduce) { .brand h1 { animation: none; } }
+.role-chip {
+  display: inline-flex; align-items: center; gap: 7px; margin-top: 4px; padding: 3px 11px; border-radius: 999px;
+  font-size: 11.5px; font-weight: 600; color: var(--muted);
+  background: rgba(36,51,80,.6); border: 1px solid var(--line);
+}
+.role-chip i { width: 6px; height: 6px; border-radius: 50%; background: var(--live); box-shadow: 0 0 8px var(--live); }
+
+/* ===== Tarjeta de posición ===== */
+.stat-tile {
+  position: relative; height: 100%; padding: 16px 18px 18px; border-radius: 18px; overflow: hidden;
+  background: linear-gradient(150deg, color-mix(in srgb, var(--c) 16%, var(--raise)) 0%, var(--surface) 75%);
+  border: 1px solid color-mix(in srgb, var(--c) 32%, var(--line));
+  transition: transform .2s, box-shadow .2s;
+}
+.stat-tile::after {
+  content: ""; position: absolute; right: -28px; top: -28px; width: 96px; height: 96px; border-radius: 50%;
+  background: radial-gradient(circle, color-mix(in srgb, var(--c) 28%, transparent), transparent 70%); pointer-events: none;
+}
+.stat-tile:hover { transform: translateY(-3px); box-shadow: 0 12px 26px color-mix(in srgb, var(--c) 18%, transparent); }
+.stat-ico {
+  width: 36px; height: 36px; border-radius: 12px; display: grid; place-items: center; margin-bottom: 14px;
+  color: var(--c); background: color-mix(in srgb, var(--c) 18%, transparent);
+  border: 1px solid color-mix(in srgb, var(--c) 35%, transparent);
+}
+.stat-ico svg { width: 19px; height: 19px; }
+.stat-tile .stat-label { text-transform: uppercase; letter-spacing: 1.4px; font-size: 10.5px; margin-bottom: 6px; }
+.stat-tile .stat-value { font-size: 21px; font-weight: 700; letter-spacing: -.3px; color: #fff; }
+
+/* ===== Título elegante ===== */
+.brand h1 {
+  font-family: 'Bricolage Grotesque', 'Sora', sans-serif; font-weight: 800; letter-spacing: -.8px;
+  font-size: clamp(1.9rem, 3.6vw, 2.7rem); line-height: 1.05;
+}
+.app-sub { font-size: 11px; font-weight: 700; letter-spacing: 2.4px; text-transform: uppercase; color: var(--accent); opacity: .8; margin-top: 4px; }
+
+/* ===== Tarjetas sobrias ===== */
+.stat-tile {
+  padding: 18px 20px 20px; border-radius: 16px;
+  background: rgba(13,27,42,.45); border: 1px solid var(--line);
+  transition: border-color .2s;
+}
+.stat-tile::after { display: none; }
+.stat-tile:hover { transform: none; box-shadow: none; border-color: color-mix(in srgb, var(--c) 55%, var(--line)); }
+.stat-tile .stat-label { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.stat-tile .stat-label::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--c); }
+.stat-tile .stat-value {
+  font-family: 'Bricolage Grotesque', 'Sora', sans-serif; font-weight: 700; font-size: 26px; letter-spacing: -.3px;
+  font-variant-numeric: lining-nums tabular-nums; color: #fff;
+}
+
+/* ===== Estado del bus ===== */
+.truck-status {
+  --s: var(--muted); display: flex; align-items: center; gap: 14px; padding: 14px 16px; margin-bottom: 16px; border-radius: 16px;
+  background: color-mix(in srgb, var(--s) 12%, rgba(13,27,42,.45)); border: 1px solid color-mix(in srgb, var(--s) 40%, var(--line));
+  transition: background .3s, border-color .3s;
+}
+.truck-status[data-state=move] { --s: var(--live); }
+.truck-status[data-state=on]   { --s: var(--place); }
+.truck-status[data-state=stop] { --s: var(--hist); }
+.truck-status[data-state=off]  { --s: var(--muted); }
+.truck-status[data-state=last] { --s: #b392f0; }
+.ts-dot { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; background: var(--s); box-shadow: 0 0 0 4px color-mix(in srgb, var(--s) 25%, transparent); }
+.truck-status[data-state=move] .ts-dot { animation: pulse 2s ease-in-out infinite; }
+.ts-title { font-family: 'Bricolage Grotesque', 'Sora', sans-serif; font-weight: 700; font-size: 18px; line-height: 1.1; }
+.ts-sub { font-size: 12px; color: var(--muted); margin-top: 3px; font-variant-numeric: tabular-nums; }
+
+/* ===== Duración y distancia de rutas ===== */
+.route-meta { font-size: 11.5px; color: var(--muted); margin: 3px 0 0 20px; font-variant-numeric: tabular-nums; }
+
+/* ===== Resultados de búsqueda por lugar ===== */
+.place-result { display: flex; flex-direction: column; gap: 6px; }
+.hist-badge {
+  align-self: flex-start; font-size: 11px; font-weight: 700; padding: 2px 9px; border-radius: 999px;
+  background: rgba(138,151,173,.15); color: var(--muted); border: 1px solid var(--line);
+}
+.hist-badge.yes { background: color-mix(in srgb, var(--live) 16%, transparent); color: var(--live); border-color: color-mix(in srgb, var(--live) 40%, transparent); }
+.hist-badge.no  { background: color-mix(in srgb, var(--hist) 12%, transparent); color: var(--hist); border-color: color-mix(in srgb, var(--hist) 35%, transparent); }
+
+/* ===== Posición actual en la barra lateral ===== */
+#statsCard .stat-tile { padding: 12px 14px 14px; }
+#statsCard .stat-tile .stat-label { margin-bottom: 6px; }
+#statsCard .stat-tile .stat-value { font-size: 21px; }
+#statsCard .col-6 .stat-value { font-size: 17px; }
+
+/* ===== Barra superior retraíble (celular) ===== */
+.top-extra { display: none; flex: 1 0 100%; flex-wrap: wrap; gap: .6rem; }
+.topbar.open .top-extra { display: flex; }
+#topToggle { display: inline-grid; place-items: center; width: 38px; height: 38px; padding: 0; flex-shrink: 0; }
+#topToggle svg { transition: transform .25s; }
+.topbar.open #topToggle svg { transform: rotate(180deg); }
+@media (min-width: 992px) {
+  .topbar .top-extra, .topbar.open .top-extra { display: contents; }
+}
+@media (max-width: 991px) {
+  .topbar { position: static; }
+  .topbar > .container-fluid { padding-top: .65rem !important; padding-bottom: .65rem !important; gap: .75rem !important; }
+  .logo { width: 44px; height: 44px; border-radius: 14px; }
+  .logo::after { inset: -4px; border-radius: 17px; }
+  .logo svg { width: 24px; height: 24px; }
+  .brand { flex: 1 1 0; min-width: 0; }
+  .brand h1 { font-size: 1.4rem; letter-spacing: -.5px; }
+  .topbar:not(.open) .app-sub { display: none; }
+  main.container-fluid { margin-top: 1rem !important; }
+}
+
+/* ================= Ajustes por la encuesta de usuarios ================= */
+/* 1) Misma paleta oscura, pero con más contraste: paneles y bordes un poco más claros, texto secundario más legible */
+:root { --surface: #1f2e4a; --raise: #2b3e62; --line: #3a5075; --muted: #b6c2d6; }
+.panel { background: linear-gradient(180deg, rgba(43,62,98,.62), rgba(31,46,74,.96)); border-color: var(--line); }
+.topbar { background: rgba(31,46,74,.92); }
+.form-control, .form-select { background-color: rgba(13,27,42,.7); border-color: #4a6188; }
+.btn-quiet { border-color: #4a6188; }
+.stat-tile { background: rgba(13,27,42,.6); }
+.routes-table td, .routes-table th { border-color: var(--line); }
+
+/* 2) Letras más grandes y más espacio entre elementos */
+body { font-size: 15px; }
+.panel { padding: 24px; margin-bottom: 20px; }
+.panel-title { font-size: 17px; margin-bottom: 18px; }
+.field-label { font-size: 13.5px; }
+.section-label { font-size: 14.5px; margin: 22px 0 12px; }
+.muted { font-size: 14px; }
+.status { font-size: 13.5px; }
+.seg label { font-size: 15px; }
+.seg.sm label { font-size: 14px; }
+.form-control, .form-select, .form-control-sm, .form-select-sm { font-size: 15px; }
+.btn-sm { font-size: 14px; padding: 7px 14px; }
+.notice { font-size: 14px; }
+.pass-item, .place-result { font-size: 14px; }
+.popover-body { font-size: 14px; }
+.routes-table { font-size: 14px; }
+.routes-table th { font-size: 13px; }
+.routes-table td { padding-top: 9px; padding-bottom: 9px; }
+.route-meta { font-size: 13px; }
+.hist-badge { font-size: 12px; }
+.ts-title { font-size: 19px; }
+.ts-sub { font-size: 14px; }
+.app-sub { font-size: 12px; }
+.stat-tile .stat-label, #statsCard .stat-tile .stat-label { font-size: 12px; }
+.route-legend { font-size: 13px; color: var(--muted); margin-top: 12px; line-height: 1.6; }
+.route-legend b { color: var(--text); }
+.route-legend .lg-pin {
+  display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 50%;
+  background: var(--accent); color: #0d1b2a; font-weight: 800; font-size: 11px; vertical-align: middle; margin-right: 4px;
+}
+
+/* 3) Botón "Seguir bus" dentro del mapa */
+.map-follow-btn {
+  display: inline-flex; align-items: center; gap: 8px; padding: 9px 14px; border-radius: 12px; cursor: pointer;
+  font: 600 14px 'Sora', 'Manrope', sans-serif; color: var(--text);
+  background: rgba(31,46,74,.95); border: 1px solid #4a6188; box-shadow: 0 6px 18px rgba(0,0,0,.35);
+}
+.map-follow-btn svg { width: 18px; height: 18px; }
+.map-follow-btn.active { background: var(--grad); color: #0d1b2a; border-color: transparent; }
+.map-follow-btn:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+
+/* 4) Coordenadas en segundo plano */
+.ago-line { font-size: 14px; color: var(--muted); margin-top: 12px; }
+.ago-line b { color: var(--text); }
+.coords { margin-top: 12px; border-top: 1px solid var(--line); padding-top: 10px; }
+.coords summary { cursor: pointer; font-size: 14px; color: var(--accent); font-weight: 600; }
+.coords .coord-row { display: flex; justify-content: space-between; font-size: 14px; margin-top: 8px; font-variant-numeric: tabular-nums; }
+.coords .coord-row span:first-child { color: var(--muted); }
+
+/* 5) Aviso visible cuando el bus deja de enviar datos */
+#mapWrap { position: relative; }
+.map-alert {
+  position: absolute; z-index: 800; bottom: 26px; left: 50%; transform: translateX(-50%);
+  width: min(560px, calc(100% - 28px)); display: flex; align-items: flex-start; gap: 10px;
+  padding: 12px 16px; border-radius: 14px; font-size: 14px; line-height: 1.4; color: #e8edf3;
+  background: rgba(18, 28, 44, .9); backdrop-filter: blur(6px); border: 1px solid rgba(244,162,97,.45);
+  box-shadow: 0 10px 26px rgba(0,0,0,.35);
+}
+.map-alert svg { flex-shrink: 0; width: 18px; height: 18px; color: #f4a261; margin-top: 1px; }
+.map-alert b { display: block; font-size: 15px; }
+/* Logo de OnRoute: el pin necesita un poco más de tamaño que el bus anterior */
+.logo svg { width: 36px; height: 36px; }
+@media (max-width: 991px) { .logo svg { width: 29px; height: 29px; } }

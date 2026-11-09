@@ -29,6 +29,9 @@ DB_SSLMODE = os.environ.get("DB_SSLMODE", "require")
 
 
 APP_NAME = os.environ.get("APP_NAME", "GPS Truck Tracker")
+# Lo que ve la gente en la página: nombre de la ruta y del bus (para saber a qué bus se monta)
+ROUTE_NAME = os.environ.get("ROUTE_NAME", "Ruta Uninorte")
+BUS_NAME = os.environ.get("BUS_NAME", "Bus de Luis")
 
 
 ACCOUNT_ID = os.environ.get("ACCOUNT_ID", "main")
@@ -68,10 +71,42 @@ TOMTOM_API_KEY = os.environ.get("TOMTOM_API_KEY", "").strip()
 ETA_FALLBACK_KMH = float(os.environ.get("ETA_FALLBACK_KMH", "22"))  # velocidad promedio del bus sin datos de tráfico
 ETA_BUS_MAX_AGE_S = 180      # si el último dato del bus es más viejo que esto, se considera sin señal
 ETA_HERE_M = 80              # a menos de esto, "el bus está donde estás"
-ETA_CACHE_S = 30             # TomTom se consulta máximo cada 30 s por zona del usuario (cuida la cuota gratis);
-                             # entre consultas el tiempo se ajusta según cuánto se acercó el bus
+# TomTom se consulta máximo cada ETA_CACHE_S segundos por zona del usuario (el tráfico no cambia tanto en
+# 1-2 min y así se cuida la cuota gratis). Entre consultas el tiempo se ajusta según cuánto se acercó el bus,
+# así que la página sigue actualizándose cada 10 s.
+ETA_CACHE_S = int(os.environ.get("ETA_CACHE_S", "120"))
+TOMTOM_MONTHLY_QUOTA = int(os.environ.get("TOMTOM_MONTHLY_QUOTA", "20000"))  # para la barra de la página de métricas
+ETA_LOG_EVERY_S = 60         # cada usuario guarda como máximo 1 registro "eta" por minuto (la página pide cada 10 s)
+_eta_log_last = {}           # client_id -> (momento, fuente) del último registro guardado
 _eta_cache = {}
 _eta_cache_lock = threading.Lock()
+
+# ---------- Semana 3: modelo propio de tiempo de llegada (ML) ----------
+# ETA_METHOD (en el .env):
+#   auto     -> modelo propio si existe; si no, TomTom; si no, el estimado (por defecto)
+#   ml       -> modelo propio; si no se puede, el estimado (sin TomTom)
+#   tomtom   -> como antes: TomTom y, si falla, el estimado
+#   estimado -> solo la fórmula (distancia / velocidad)
+# El modelo y la ruta los generan ml/exportar_dataset.py y ml/entrenar.py.
+# Si no existen (o falta scikit-learn), el servidor funciona igual que antes.
+ETA_METHOD = os.environ.get("ETA_METHOD", "auto").strip().lower()
+_BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+ML_MODEL_PATH = os.environ.get("ML_MODEL_PATH", os.path.join(_BASE_DIR, "ml", "modelo_eta.joblib"))
+ML_ROUTE_PATH = os.environ.get("ML_ROUTE_PATH", os.path.join(_BASE_DIR, "ml", "ruta_referencia.json"))
+ML_MAX_OFF_ROUTE_M = 300     # si el bus está a más de esto de la ruta conocida, no se usa el modelo
+_ML_MODEL = None
+_ML_ROUTE = None
+if ETA_METHOD in ("auto", "ml") and os.path.exists(ML_MODEL_PATH) and os.path.exists(ML_ROUTE_PATH):
+    try:
+        from ml.eta_ml import RefRoute, build_features as ml_build_features, load_model, predict_seconds
+        _ML_MODEL = load_model(ML_MODEL_PATH)
+        _ML_ROUTE = RefRoute.load(ML_ROUTE_PATH) if _ML_MODEL else None
+        if _ML_MODEL:
+            print(f"[ML] Modelo de llegada cargado: {_ML_MODEL.get('nombre')} "
+                  f"({_ML_MODEL.get('recorridos')} recorridos, entrenado {_ML_MODEL.get('entrenado')})")
+    except Exception as exc:
+        print(f"[ML] No se pudo cargar el modelo, se sigue sin ML: {exc}")
+        _ML_MODEL = _ML_ROUTE = None
 
 # ---------- Semana 3: métricas de uso (página oculta /metricas) ----------
 # Si METRICS_KEY tiene valor, /metricas solo abre con ?key=<valor>; si no, cualquiera con el enlace.
@@ -677,10 +712,13 @@ def compute_eta(blat, blon, ulat, ulon, speed_kmh):
         return (seconds * ratio, meters * ratio, delay * ratio, path, source)
     result = None
     if TOMTOM_API_KEY:
+        t0 = time.time()
         try:
             result = (*tomtom_route(blat, blon, ulat, ulon), "tomtom")
+            record_usage("tomtom", None, None, round((time.time() - t0) * 1000), "ok")
         except Exception as exc:
             print(f"[ETA] TomTom falló, se usa el estimado: {exc}")
+            record_usage("tomtom", None, None, round((time.time() - t0) * 1000), "error")
     if result is None:
         result = (*estimate_eta(blat, blon, ulat, ulon, speed_kmh), "estimado")
     with _eta_cache_lock:
@@ -688,6 +726,61 @@ def compute_eta(blat, blon, ulat, ulon, speed_kmh):
             _eta_cache.clear()
         _eta_cache[key] = (now, result, straight_now)
     return result
+
+
+def ml_eta(rows, blat, blon, ulat, ulon, speed_kmh):
+    """Tiempo de llegada con el modelo propio (entrenado con recorridos reales).
+    El destino es el punto de la ruta de referencia más cercano al usuario.
+    Devuelve None si no se puede usar (sin modelo, bus fuera de la ruta o yendo
+    en sentido contrario al usuario); entonces se usa TomTom o el estimado."""
+    if not (_ML_MODEL and _ML_ROUTE):
+        return None
+    b_cum, b_i, b_off = _ML_ROUTE.project(blat, blon)
+    u_cum, u_i, _ = _ML_ROUTE.project(ulat, ulon)
+    if b_off > ML_MAX_OFF_ROUTE_M:
+        return None
+    sentido = 1 if u_cum >= b_cum else 0
+
+    # ¿Hacia dónde va el bus sobre la ruta? (posición de hace 25-120 s)
+    t_new = parse_dt(rows[0][2])
+    for la, lo, g, _ in rows[1:]:
+        t_old = parse_dt(g)
+        if t_new and t_old and 25 <= (t_new - t_old).total_seconds() <= 120:
+            avance = b_cum - _ML_ROUTE.project(la, lo)[0]
+            if abs(avance) > 20 and (avance > 0) != (sentido == 1):
+                return None   # el bus va en sentido contrario: tiene que dar la vuelta
+            break
+
+    dist_ruta = abs(u_cum - b_cum)
+    dest_lat, dest_lon = _ML_ROUTE.pts[u_i]
+    feats = ml_build_features(
+        dist_ruta_m=dist_ruta,
+        dist_recta_m=haversine_m(blat, blon, dest_lat, dest_lon),
+        avance_m=b_cum, sentido=sentido, vel_actual_kmh=speed_kmh or 0.0,
+        dt=t_new or now_local(),
+    )
+    try:
+        seconds = predict_seconds(_ML_MODEL, feats)
+    except Exception as exc:
+        print(f"[ML] Falló la predicción, se usa TomTom/estimado: {exc}")
+        return None
+    path = _ML_ROUTE.between(b_i, u_i)
+    path = [(blat, blon)] + list(path[1:]) if path else [(blat, blon), (ulat, ulon)]
+    return seconds, dist_ruta, 0, path, "modelo"
+
+
+def record_eta_usage(client_id, eta_min, source):
+    """Guarda la consulta de llegada, pero máximo 1 vez por minuto por usuario
+    (o cuando cambia la fuente, por ejemplo cuando el bus llega: "here")."""
+    now = time.time()
+    if client_id:
+        last = _eta_log_last.get(client_id)
+        if last and now - last[0] < ETA_LOG_EVERY_S and last[1] == source:
+            return
+        if len(_eta_log_last) > 5000:
+            _eta_log_last.clear()
+        _eta_log_last[client_id] = (now, source)
+    record_usage("eta", client_id, None, eta_min, source)
 
 
 def record_usage(event, client_id=None, device=None, value=None, detail=None):
@@ -760,7 +853,8 @@ def build_metrics(days: int):
         extras_ok = False
 
     per_day = {d: {"date": d, "points": 0, "km": 0.0, "active_s": 0.0, "max_kmh": 0.0,
-                   "trips": set(), "lost": 0} for d in day_keys}
+                   "trips": set(), "lost": 0, "first": None, "last": None} for d in day_keys}
+    intervals = []   # segundos entre una ubicación y la siguiente (el ESP32 envía cada 10 s)
     latencies = []
     hourly = {}
     battery_series, signal_series = [], []
@@ -775,6 +869,8 @@ def build_metrics(days: int):
             prev = None
             continue
         d["points"] += 1
+        d["first"] = d["first"] or received_at[11:16]
+        d["last"] = received_at[11:16]
         if session_id:
             d["trips"].add(session_id)
         if rdt and gdt:
@@ -791,6 +887,7 @@ def build_metrics(days: int):
         if prev is not None and prev["session"] == session_id and gdt and prev["gdt"]:
             dt = (gdt - prev["gdt"]).total_seconds()
             if 0 < dt <= 120:
+                intervals.append(dt)
                 dist = haversine_m(prev["lat"], prev["lon"], lat, lon)
                 kmh = dist / dt * 3.6
                 if kmh <= 120:            # descarta saltos del GPS
@@ -813,7 +910,7 @@ def build_metrics(days: int):
             "km": round(d["km"], 2), "active_h": round(hours, 2),
             "avg_kmh": round(d["km"] / hours, 1) if hours > 0.01 else None,
             "max_kmh": round(d["max_kmh"], 1) if d["max_kmh"] else None,
-            "lost": d["lost"],
+            "lost": d["lost"], "first": d["first"], "last": d["last"],
         })
 
     hourly_out = []
@@ -860,26 +957,32 @@ def build_metrics(days: int):
         "loss_pct": round(total_lost / (received + total_lost) * 100, 2) if received + total_lost else None,
         "latency_median_s": round(_percentile(latencies, 50), 1) if latencies else None,
         "latency_p95_s": round(_percentile(latencies, 95), 1) if latencies else None,
+        "interval_median_s": round(_percentile(intervals, 50), 1) if intervals else None,
     }
 
     # ---------- Usuarios de la página ----------
     try:
         ev = _query(
-            "SELECT ts, event, client_id, device, value FROM usage_events "
+            "SELECT ts, event, client_id, device, value, detail FROM usage_events "
             "WHERE account_id = %s AND ts >= %s ORDER BY id ASC",
             (ACCOUNT_ID, since_s),
         )
         usage_ok = True
     except Exception:
         ev, usage_ok = [], False
-    u_day = {d: {"date": d, "visits": 0, "visitors": set(), "eta": 0} for d in day_keys}
+    u_day = {d: {"date": d, "visits": 0, "visitors": set(), "eta_users": set(), "sessions": 0,
+                 "tomtom": 0} for d in day_keys}
     by_hour = [0] * 24
     counts = {"geo_granted": 0, "geo_denied": 0, "geo_unavailable": 0}
     devices = {"mobile": 0, "desktop": 0}
     seen_dev = set()
-    eta_values = []
-    all_visitors = set()
-    for ts, event, client_id, dev, value in ev:
+    all_visitors, eta_users = set(), set()
+    visit_days = {}                      # client_id -> días en que abrió la página
+    eta_by_client = {}                   # client_id -> [(fecha, minutos, fuente)]
+    sources = {"tomtom": 0, "estimado": 0, "modelo": 0, "here": 0}
+    eta_updates = 0
+    tomtom = {"ok": 0, "error": 0, "ms": []}
+    for ts, event, client_id, dev, value, detail in ev:
         d = u_day.get(ts[:10])
         if d is None:
             continue
@@ -888,6 +991,7 @@ def build_metrics(days: int):
             if client_id:
                 d["visitors"].add(client_id)
                 all_visitors.add(client_id)
+                visit_days.setdefault(client_id, set()).add(ts[:10])
             try:
                 by_hour[int(ts[11:13])] += 1
             except ValueError:
@@ -896,24 +1000,82 @@ def build_metrics(days: int):
                 devices[dev] += 1
                 seen_dev.add(client_id)
         elif event == "eta":
-            d["eta"] += 1
-            if value is not None:
-                eta_values.append(value)
+            eta_updates += 1
+            if detail in sources:
+                sources[detail] += 1
+            if client_id:
+                d["eta_users"].add(client_id)
+                eta_users.add(client_id)
+                eta_by_client.setdefault(client_id, []).append((parse_dt(ts), value, detail))
+        elif event == "tomtom":
+            d["tomtom"] += 1
+            tomtom["ok" if detail == "ok" else "error"] += 1
+            if value is not None and detail == "ok":
+                tomtom["ms"].append(value)
         elif event in counts:
             counts[event] += 1
+
+    # Una "consulta" = una persona siguiendo el bus. Si pasa más de 10 min sin pedir
+    # el tiempo de llegada, la siguiente vez cuenta como otra consulta.
+    sessions = []
+    for client_id, items in eta_by_client.items():
+        items = [it for it in items if it[0]]
+        cur_s = None
+        for t, value, detail in items:
+            if cur_s is None or (t - cur_s["end"]).total_seconds() > 600:
+                cur_s = {"start": t, "end": t, "first_min": value, "arrived": False}
+                sessions.append(cur_s)
+                day = u_day.get(t.strftime("%Y-%m-%d"))
+                if day:
+                    day["sessions"] += 1
+            cur_s["end"] = t
+            if detail == "here":
+                cur_s["arrived"] = True
+    durations = [(x["end"] - x["start"]).total_seconds() / 60 for x in sessions]
+    first_eta = [x["first_min"] for x in sessions if x["first_min"]]
+    arrived = sum(1 for x in sessions if x["arrived"])
+
+    # TomTom en el mes (la cuota es mensual), aunque el periodo elegido sea más corto
+    try:
+        month_start = now.replace(day=1, hour=0, minute=0, second=0).strftime("%Y-%m-%d %H:%M:%S")
+        tomtom_month = _query("SELECT COUNT(*) FROM usage_events WHERE event = 'tomtom' AND ts >= %s",
+                              (month_start,))[0][0]
+    except Exception:
+        tomtom_month = None
+
     asked = counts["geo_granted"] + counts["geo_denied"]
     usage = {
         "enabled": usage_ok,
-        "days": [{"date": d["date"], "visits": d["visits"], "visitors": len(d["visitors"]), "eta": d["eta"]}
+        "days": [{"date": d["date"], "visits": d["visits"], "visitors": len(d["visitors"]),
+                  "eta_users": len(d["eta_users"]), "sessions": d["sessions"], "tomtom": d["tomtom"]}
                  for d in u_day.values()],
         "total_visits": sum(d["visits"] for d in u_day.values()),
         "unique_visitors": len(all_visitors),
-        "eta_queries": sum(d["eta"] for d in u_day.values()),
-        "eta_avg_min": round(sum(eta_values) / len(eta_values), 1) if eta_values else None,
+        "returning_visitors": sum(1 for v in visit_days.values() if len(v) >= 2),
+        "eta_users": len(eta_users),
+        "eta_sessions": len(sessions),
+        "eta_updates": eta_updates,
+        "eta_session_median_min": round(_percentile(durations, 50), 1) if durations else None,
+        "eta_first_avg_min": round(sum(first_eta) / len(first_eta), 1) if first_eta else None,
+        "eta_arrived": arrived,
+        "eta_sources": sources,
         "geo": counts,
         "geo_accept_pct": round(counts["geo_granted"] / asked * 100) if asked else None,
         "devices": devices,
         "visits_by_hour": by_hour,
+        "funnel": {"visitors": len(all_visitors), "geo": counts["geo_granted"],
+                   "eta_users": len(eta_users), "arrived": arrived},
+    }
+    traffic_api = {
+        "configured": bool(TOMTOM_API_KEY),
+        "every_s": ETA_CACHE_S,
+        "calls": tomtom["ok"] + tomtom["error"],
+        "errors": tomtom["error"],
+        "avg_ms": round(sum(tomtom["ms"]) / len(tomtom["ms"])) if tomtom["ms"] else None,
+        "month_calls": tomtom_month,
+        "month_quota": TOMTOM_MONTHLY_QUOTA,
+        "eta_method": ETA_METHOD,
+        "ml_loaded": _ML_MODEL is not None,
     }
 
     return {
@@ -931,6 +1093,7 @@ def build_metrics(days: int):
         "battery_series": _downsample(battery_series),
         "signal_series": _downsample(signal_series),
         "usage": usage,
+        "traffic_api": traffic_api,
     }
 
 
@@ -1017,9 +1180,17 @@ def listen_notifications():
 app = Flask(__name__)
 
 
+# Versión de los archivos de static/ (cambia en cada reinicio): obliga al navegador a bajar el CSS/JS nuevo tras un deploy
+ASSET_V = str(int(time.time()))
+
+
 @app.route("/")
 def index():
-    return render_template("index.html", role=ROLE, app_name=APP_NAME)
+    return render_template(
+        "index.html", role=ROLE, app_name=APP_NAME, asset_v=ASSET_V,
+        route_name=ROUTE_NAME, bus_name=BUS_NAME, bus_name_lc=BUS_NAME[:1].lower() + BUS_NAME[1:],
+        page_config={"routeName": ROUTE_NAME, "busName": BUS_NAME},
+    )
 
 
 @app.route("/api/latest")
@@ -1233,12 +1404,18 @@ def api_eta():
             break
 
     if straight <= ETA_HERE_M:
-        record_usage("eta", data.get("client_id"), None, 0, "here")
+        record_eta_usage(data.get("client_id"), 0, "here")
         return jsonify({**base, "status": "here", "straight_m": round(straight), "trend": trend})
 
-    seconds, meters, delay, path, source = compute_eta(blat, blon, ulat, ulon, speed)
+    # Método de cálculo según ETA_METHOD: modelo propio -> TomTom -> estimado
+    result = ml_eta(rows, blat, blon, ulat, ulon, speed) if ETA_METHOD in ("auto", "ml") else None
+    if result is None and ETA_METHOD in ("ml", "estimado"):
+        result = (*estimate_eta(blat, blon, ulat, ulon, speed), "estimado")
+    if result is None:
+        result = compute_eta(blat, blon, ulat, ulon, speed)
+    seconds, meters, delay, path, source = result
     eta_min = seconds / 60
-    record_usage("eta", data.get("client_id"), None, round(eta_min, 1), source)
+    record_eta_usage(data.get("client_id"), round(eta_min, 1), source)
     return jsonify({
         **base, "status": "ok", "source": source,
         "eta_s": round(seconds), "eta_min": max(1, round(eta_min)),

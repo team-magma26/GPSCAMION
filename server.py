@@ -1439,6 +1439,48 @@ def api_usage():
     return jsonify({"ok": True})
 
 
+# ---------- Respaldo: un celular dentro del bus envía su GPS por internet ----------
+# Se usa si el módem del equipo falla. Solo funciona en el WRITER (es el que lleva los recorridos)
+# y pide una llave (INGEST_KEY en el .env; si no existe, se usa la misma METRICS_KEY).
+INGEST_KEY = os.environ.get("INGEST_KEY", "").strip() or METRICS_KEY
+INGEST_MAX_ACC_M = 60        # ubicaciones del celular con más error que esto se descartan
+
+
+def _ingest_allowed(key):
+    return bool(INGEST_KEY) and key == INGEST_KEY
+
+
+@app.route("/enviar")
+def enviar_page():
+    """Página para el celular que va en el bus (oculta, con llave)."""
+    if not _ingest_allowed(request.args.get("key", "")):
+        return "Not Found", 404
+    return render_template("enviar.html", key=request.args.get("key", ""), bus_name=BUS_NAME,
+                           writer=IS_WRITER)
+
+
+@app.route("/api/ingest", methods=["POST"])
+def api_ingest():
+    """Recibe una ubicación del celular de respaldo y la guarda igual que una trama del ESP32."""
+    data = request.get_json(silent=True) or {}
+    if not _ingest_allowed(str(data.get("key", ""))):
+        return jsonify({"error": "Not Found"}), 404
+    if not IS_WRITER:
+        return jsonify({"error": "Esta instancia no es el writer: abre la página en el dominio del writer"}), 409
+    try:
+        lat, lon = float(data["lat"]), float(data["lon"])
+        acc = float(data.get("acc") or 0)
+        gps_time = datetime.strptime(str(data["time"]), "%Y-%m-%d %H:%M:%S").strftime("%Y-%m-%d %H:%M:%S")
+    except (KeyError, TypeError, ValueError):
+        return jsonify({"error": "datos no válidos"}), 400
+    if not (-90 <= lat <= 90 and -180 <= lon <= 180):
+        return jsonify({"error": "coordenadas fuera de rango"}), 400
+    if acc > INGEST_MAX_ACC_M:
+        return jsonify({"ok": False, "skipped": f"precisión {acc:.0f} m (máx {INGEST_MAX_ACC_M} m)"})
+    save_location(lat, lon, gps_time, {})
+    return jsonify({"ok": True})
+
+
 def _metrics_allowed():
     return not METRICS_KEY or request.args.get("key") == METRICS_KEY
 

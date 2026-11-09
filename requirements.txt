@@ -1,3 +1,9 @@
 flask
 psycopg2-binary
 python-dotenv
+# Semana 3: modelo propio de tiempo de llegada (ml/)
+scikit-learn
+joblib
+numpy
+pandas
+matplotlib

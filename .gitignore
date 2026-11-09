@@ -216,3 +216,6 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Dataset del modelo de llegada (se regenera con ml/exportar_dataset.py)
+ml/dataset_eta.csv

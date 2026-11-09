@@ -87,6 +87,15 @@
   .note { border: 1px solid var(--line2); border-left: 3px solid var(--warn); border-radius: 8px; padding: 10px 14px; font-size: 13.5px; margin-top: 14px;
     display: flex; gap: 10px; align-items: flex-start; background: var(--surface); }
   .note svg { width: 16px; height: 16px; color: var(--warn); flex-shrink: 0; margin-top: 2px; }
+  .meter { height: 8px; border-radius: 4px; background: var(--line); overflow: hidden; margin-top: 10px; }
+  .meter i { display: block; height: 100%; width: 0; background: var(--accent); border-radius: 4px; }
+  .meter.warn i { background: var(--warn); } .meter.bad i { background: var(--bad); }
+  .split { list-style: none; padding: 0; margin: 4px 0 0; }
+  .split li { display: grid; grid-template-columns: 120px 1fr 64px; align-items: center; gap: 12px; padding: 7px 0; font-size: 14px; }
+  .split li + li { border-top: 1px solid var(--line); }
+  .split .meter { margin: 0; }
+  .split b { text-align: right; font-variant-numeric: tabular-nums; }
+  .split span { color: var(--muted); }
   @media (min-width: 1200px) { .hero-row { flex: 1; } }
   @media (max-width: 575px) { .big { font-size: 24px; } .ring { width: 100px; height: 100px; } .hero-num { font-size: 24px; } }
   /* Componentes de Bootstrap (.card, .table) con el tema de la página */
@@ -152,7 +161,7 @@
       <div class="row g-3 h-100">
         <div class="col-6"><div class="card card-m">
           <div class="card-top"><span class="lbl">Ubicaciones recibidas</span></div>
-          <div class="big" id="mRecv">--</div><div class="small">en el periodo elegido</div></div></div>
+          <div class="big" id="mRecv">--</div><div class="small" id="mRecvSub">en el periodo elegido</div></div></div>
         <div class="col-6"><div class="card card-m">
           <div class="card-top"><span class="lbl">Paquetes perdidos</span></div>
           <div class="big" id="mLoss">--</div><div class="small" id="mLossSub">--</div></div></div>
@@ -191,7 +200,7 @@
     <div class="col-12 col-xl-5"><div class="card panel"><div class="panel-h"><h3>Kilómetros por día</h3></div><div class="chart-box"><canvas id="chKm"></canvas></div></div></div>
     <div class="col-12 col-xl-7"><div class="card panel"><div class="panel-h"><h3>Detalle por día</h3><span class="hint">más reciente primero</span></div>
       <div class="table-responsive"><table class="table table-sm table-hover align-middle">
-        <thead><tr><th>Fecha</th><th>Recorridos</th><th>Km</th><th>Horas</th><th>Vel. prom.</th><th>Vel. máx.</th><th>Ubicaciones</th><th>Perdidas</th></tr></thead>
+        <thead><tr><th>Fecha</th><th>Horario</th><th>Recorridos</th><th>Km</th><th>Horas</th><th>Vel. prom.</th><th>Vel. máx.</th><th>Ubicaciones</th><th>Perdidas</th></tr></thead>
         <tbody id="oTable"></tbody>
       </table></div></div></div>
   </div>
@@ -202,19 +211,22 @@
     <p class="section-desc">Quién usa OnRoute y para qué.</p>
   </div>
   <div class="row g-3">
-    <div class="col-6 col-lg"><div class="card card-m">
-      <div class="card-top"><span class="lbl">Visitas</span></div>
-      <div class="big" id="uVisits">--</div><div class="small">veces que se abrió la página</div></div></div>
-    <div class="col-6 col-lg"><div class="card card-m">
+    <div class="col-6 col-lg-4"><div class="card card-m">
       <div class="card-top"><span class="lbl">Visitantes únicos</span></div>
-      <div class="big" id="uUnique">--</div><div class="small">navegadores distintos</div></div></div>
-    <div class="col-6 col-lg"><div class="card card-m">
+      <div class="big" id="uUnique">--</div><div class="small" id="uUniqueSub">--</div></div></div>
+    <div class="col-6 col-lg-4"><div class="card card-m">
+      <div class="card-top"><span class="lbl">Personas que consultaron la llegada</span></div>
+      <div class="big" id="uEtaUsers">--</div><div class="small" id="uEtaUsersSub">--</div></div></div>
+    <div class="col-6 col-lg-4"><div class="card card-m">
       <div class="card-top"><span class="lbl">Consultas de llegada</span></div>
       <div class="big" id="uEta">--</div><div class="small" id="uEtaSub">--</div></div></div>
-    <div class="col-6 col-lg"><div class="card card-m">
+    <div class="col-6 col-lg-4"><div class="card card-m">
+      <div class="card-top"><span class="lbl">Esperaron hasta que llegó</span></div>
+      <div class="big" id="uArr">--</div><div class="small" id="uArrSub">--</div></div></div>
+    <div class="col-6 col-lg-4"><div class="card card-m">
       <div class="card-top"><span class="lbl">Aceptan ubicación</span></div>
       <div class="big" id="uGeo">--</div><div class="small" id="uGeoSub">--</div></div></div>
-    <div class="col-12 col-lg"><div class="card card-m">
+    <div class="col-6 col-lg-4"><div class="card card-m">
       <div class="card-top"><span class="lbl">Desde el celular</span></div>
       <div class="big" id="uDev">--</div><div class="small" id="uDevSub">--</div></div></div>
   </div>
@@ -222,6 +234,27 @@
   <div class="row g-3 mt-1">
     <div class="col-12 col-xl-7"><div class="card panel"><div class="panel-h"><h3>Visitas y consultas por día</h3></div><div class="chart-box"><canvas id="chVisits"></canvas></div></div></div>
     <div class="col-12 col-xl-5"><div class="card panel"><div class="panel-h"><h3>¿A qué hora usan la página?</h3><span class="hint">visitas por hora del día</span></div><div class="chart-box"><canvas id="chHour"></canvas></div></div></div>
+  </div>
+
+  <!-- ================= TIEMPO DE LLEGADA ================= -->
+  <div class="section-head">
+    <h2>Cálculo del tiempo de llegada</h2>
+    <p class="section-desc">De dónde sale el tiempo que ve la gente y cuánto de la cuota de TomTom se usa.</p>
+  </div>
+  <div class="row g-3">
+    <div class="col-12 col-lg-4"><div class="card card-m">
+      <div class="card-top"><span class="lbl">TomTom este mes</span></div>
+      <div class="big" id="tMonth">--</div><div class="meter" id="tMeter"><i></i></div><div class="small" id="tMonthSub">--</div></div></div>
+    <div class="col-6 col-lg-4"><div class="card card-m">
+      <div class="card-top"><span class="lbl">Consultas a TomTom en el periodo</span></div>
+      <div class="big" id="tCalls">--</div><div class="small" id="tCallsSub">--</div></div></div>
+    <div class="col-6 col-lg-4"><div class="card card-m">
+      <div class="card-top"><span class="lbl">Tiempo de llegada al consultar</span></div>
+      <div class="big" id="tFirst">--</div><div class="small">promedio, al empezar cada consulta</div></div></div>
+    <div class="col-12 col-xl-6"><div class="card panel"><div class="panel-h"><h3>¿De dónde sale el tiempo?</h3><span class="hint">actualizaciones guardadas en el periodo</span></div>
+      <ul class="split" id="tSources"></ul>
+      <div class="small mt-2" id="tMethod"></div></div></div>
+    <div class="col-12 col-xl-6"><div class="card panel"><div class="panel-h"><h3>Consultas y llamadas a TomTom por día</h3></div><div class="chart-box" style="height:200px"><canvas id="chTomtom"></canvas></div></div></div>
   </div>
 </main>
 
@@ -315,6 +348,7 @@
     $("mLat").textContent = q.latency_median_s === null ? "--" : `${fmt(q.latency_median_s, 1)} s`;
     $("mLatSub").textContent = q.latency_p95_s === null ? "retraso GPS → servidor" : `retraso típico · 95 % < ${fmt(q.latency_p95_s, 1)} s`;
     $("mRecv").textContent = fmt(q.received);
+    $("mRecvSub").textContent = q.interval_median_s === null ? "en el periodo elegido" : `en el periodo · llega una cada ~${fmt(q.interval_median_s, 0)} s`;
     $("mLoss").innerHTML = q.loss_pct === null ? "--" : `${fmt(q.loss_pct, 1)}<small>%</small>`;
     $("mLossSub").textContent = `${fmt(q.lost)} de ${fmt(q.received + q.lost)} no llegaron`;
 
@@ -356,10 +390,10 @@
     $("oMax").textContent = maxes.length ? `máxima ${fmt(Math.max(...maxes), 0)} km/h` : "sin movimiento registrado";
 
     const rows = [...o.days].reverse().filter((x) => x.points > 0);
-    $("oTable").innerHTML = rows.length ? rows.map((x) => `<tr><td><b>${dayLbl(x.date)}</b></td><td>${x.trips}</td><td>${fmt(x.km, 1)}</td><td>${fmt(x.active_h, 1)}</td>
+    $("oTable").innerHTML = rows.length ? rows.map((x) => `<tr><td><b>${dayLbl(x.date)}</b></td><td>${x.first ? `${x.first}–${x.last}` : "--"}</td><td>${x.trips}</td><td>${fmt(x.km, 1)}</td><td>${fmt(x.active_h, 1)}</td>
       <td>${x.avg_kmh === null ? "--" : fmt(x.avg_kmh, 1) + " km/h"}</td><td>${x.max_kmh === null ? "--" : fmt(x.max_kmh, 0) + " km/h"}</td>
       <td>${fmt(x.points)}</td><td>${x.lost ? `<span style="color:var(--bad)">${fmt(x.lost)}</span>` : "0"}</td></tr>`).join("")
-      : `<tr><td colspan="8" class="text-center py-4" style="color:var(--muted)">Sin datos del bus en el periodo</td></tr>`;
+      : `<tr><td colspan="9" class="text-center py-4" style="color:var(--muted)">Sin datos del bus en el periodo</td></tr>`;
 
     chart("chKm", {
       type: "bar",
@@ -370,10 +404,15 @@
     }, o.days.some((x) => x.km > 0), "El bus no ha recorrido distancia en el periodo");
 
     // ---- Usuarios ----
-    $("uVisits").textContent = fmt(u.total_visits);
     $("uUnique").textContent = fmt(u.unique_visitors);
-    $("uEta").textContent = fmt(u.eta_queries);
-    $("uEtaSub").textContent = u.eta_avg_min === null ? "tiempos de llegada calculados" : `llegada promedio: ${fmt(u.eta_avg_min, 1)} min`;
+    $("uUniqueSub").textContent = `${fmt(u.total_visits)} visitas · ${fmt(u.returning_visitors)} volvieron otro día`;
+    $("uEtaUsers").textContent = fmt(u.eta_users);
+    $("uEtaUsersSub").textContent = u.unique_visitors ? `${Math.round(u.eta_users / u.unique_visitors * 100)} % de los visitantes` : "con su ubicación activada";
+    $("uEta").textContent = fmt(u.eta_sessions);
+    $("uEtaSub").textContent = u.eta_session_median_min === null ? "una persona siguiendo el bus"
+      : `siguen el bus ~${fmt(u.eta_session_median_min, 0)} min (mediana)`;
+    $("uArr").textContent = fmt(u.eta_arrived);
+    $("uArrSub").textContent = u.eta_sessions ? `${Math.round(u.eta_arrived / u.eta_sessions * 100)} % de las consultas llegaron a "¡Ya llega!"` : "el bus llegó a menos de 80 m";
     $("uGeo").innerHTML = u.geo_accept_pct === null ? "--" : `${u.geo_accept_pct}<small>%</small>`;
     $("uGeoSub").textContent = `${fmt(u.geo.geo_granted)} permiten · ${fmt(u.geo.geo_denied)} rechazan`;
     const devTotal = u.devices.mobile + u.devices.desktop;
@@ -384,11 +423,11 @@
     chart("chVisits", {
       data: { labels: u.days.map((x) => dayLbl(x.date)), datasets: [
         { type: "bar", label: "Visitas", data: u.days.map((x) => x.visits), backgroundColor: C.accent, borderRadius: 2, maxBarThickness: 24, order: 2 },
-        { type: "bar", label: "Consultas de llegada", data: u.days.map((x) => x.eta), backgroundColor: C.muted, borderRadius: 2, maxBarThickness: 24, order: 2 },
+        { type: "bar", label: "Consultas de llegada", data: u.days.map((x) => x.sessions), backgroundColor: C.muted, borderRadius: 2, maxBarThickness: 24, order: 2 },
         { type: "line", label: "Visitantes únicos", data: u.days.map((x) => x.visitors), borderColor: C.text, backgroundColor: C.text, borderWidth: 1.5, pointRadius: 2.5, tension: .2, order: 1 },
       ] },
       options: { scales: { y: { beginAtZero: true, ticks: { precision: 0 }, grid: { color: C.grid } }, x: { grid: { display: false } } }, plugins: { legend: { position: "bottom" } } },
-    }, u.days.some((x) => x.visits || x.eta), "Todavía nadie ha abierto la página en el periodo");
+    }, u.days.some((x) => x.visits || x.sessions), "Todavía nadie ha abierto la página en el periodo");
 
     const maxH = Math.max(...u.visits_by_hour);
     chart("chHour", {
@@ -400,12 +439,43 @@
     }, u.visits_by_hour.some((x) => x > 0), "Sin visitas en el periodo");
   }
 
+  function renderEta(m) {
+    const t = m.traffic_api, u = m.usage;
+    if (!t) return;
+    const used = t.month_calls === null ? null : t.month_calls / t.month_quota * 100;
+    $("tMonth").innerHTML = t.month_calls === null ? "--" : `${fmt(t.month_calls)}<small>/ ${fmt(t.month_quota)}</small>`;
+    $("tMeter").querySelector("i").style.width = `${Math.min(used || 0, 100)}%`;
+    $("tMeter").className = "meter" + (used > 90 ? " bad" : used > 70 ? " warn" : "");
+    $("tMonthSub").textContent = !t.configured ? "Sin llave de TomTom en esta instancia: se usa el estimado"
+      : `${used === null ? "--" : fmt(used, 1)} % de la cuota · máximo 1 consulta cada ${fmt(t.every_s / 60, t.every_s % 60 ? 1 : 0)} min por zona`;
+    $("tCalls").textContent = fmt(t.calls);
+    $("tCallsSub").textContent = t.calls ? `${fmt(t.errors)} con error · responde en ~${fmt(t.avg_ms)} ms` : "en los días elegidos";
+    $("tFirst").innerHTML = u.eta_first_avg_min === null ? "--" : `${fmt(u.eta_first_avg_min, 1)}<small>min</small>`;
+
+    const src = u.eta_sources, total = Object.values(src).reduce((a, b) => a + b, 0);
+    const names = { tomtom: "TomTom (tráfico)", modelo: "Modelo propio", estimado: "Estimado", here: "Bus en el sitio" };
+    $("tSources").innerHTML = total ? Object.entries(names).map(([k, n]) => {
+      const pc = src[k] / total * 100;
+      return `<li><span>${n}</span><div class="meter"><i style="width:${pc}%"></i></div><b>${fmt(pc, 0)} %</b></li>`;
+    }).join("") : '<li style="display:block;color:var(--muted)">Todavía no hay consultas de llegada en el periodo</li>';
+    const metodo = { auto: "automático (modelo propio si existe, si no TomTom, si no el estimado)", ml: "modelo propio", tomtom: "TomTom", estimado: "solo estimado" };
+    $("tMethod").textContent = `Método configurado: ${metodo[t.eta_method] || t.eta_method}` + (t.ml_loaded ? " · modelo propio cargado" : " · modelo propio aún no entrenado");
+
+    chart("chTomtom", {
+      data: { labels: u.days.map((x) => dayLbl(x.date)), datasets: [
+        { type: "bar", label: "Consultas de llegada", data: u.days.map((x) => x.sessions), backgroundColor: C.muted, borderRadius: 2, maxBarThickness: 24 },
+        { type: "bar", label: "Llamadas a TomTom", data: u.days.map((x) => x.tomtom), backgroundColor: C.accent, borderRadius: 2, maxBarThickness: 24 },
+      ] },
+      options: { scales: { y: { beginAtZero: true, ticks: { precision: 0 }, grid: { color: C.grid } }, x: { grid: { display: false } } }, plugins: { legend: { position: "bottom" } } },
+    }, u.days.some((x) => x.sessions || x.tomtom), "Sin consultas en el periodo");
+  }
+
   function load() {
     const q = new URLSearchParams({ days });
     if (KEY) q.set("key", KEY);
     fetch(`/api/metrics?${q}`)
       .then((r) => r.json())
-      .then((m) => { if (m.error) throw new Error(m.error); render(m); })
+      .then((m) => { if (m.error) throw new Error(m.error); render(m); renderEta(m); })
       .catch(() => { $("updated").textContent = "no se pudieron cargar las métricas"; });
   }
 

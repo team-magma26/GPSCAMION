@@ -3,6 +3,7 @@ import json
 import math
 import os
 import queue
+import re
 import socket
 import threading
 import time
@@ -34,6 +35,41 @@ ROUTE_NAME = os.environ.get("ROUTE_NAME", "Ruta Uninorte")
 BUS_NAME = os.environ.get("BUS_NAME", "Bus de Luis")
 
 
+def _parse_buses(text):
+    """BUSES="bus1:Bus de Luis,bus2:Bus de Andrés" -> {"bus1": "Bus de Luis", "bus2": "Bus de Andrés"}"""
+    out = {}
+    for part in (text or "").split(","):
+        if ":" in part:
+            bid, name = (x.strip() for x in part.split(":", 1))
+            if re.fullmatch(r"[A-Za-z0-9_-]{1,20}", bid) and name:
+                out[bid] = name
+    return out
+
+
+# Varios buses en la misma ruta. Cada trama trae "Id=bus1" (o bus2...) y así se sabe de cuál es.
+BUSES = _parse_buses(os.environ.get("BUSES", "")) or {"bus1": BUS_NAME, "bus2": os.environ.get("BUS2_NAME", "Bus de Andrés")}
+DEFAULT_BUS = next(iter(BUSES))           # las filas viejas (sin vehicle_id) son de este bus
+VEH_SQL = f"COALESCE(vehicle_id, '{DEFAULT_BUS}')"   # seguro: DEFAULT_BUS ya pasó por la validación de arriba
+# La app de Android no manda "Id": cada bus que use la app manda a su propio puerto UDP.
+# UDP_BUS_PORTS="5002:bus2" -> lo que llegue al puerto 5002 es del bus2 (el puerto principal es del primer bus).
+UDP_BUS_PORTS = {}
+for _part in os.environ.get("UDP_BUS_PORTS", "").split(","):
+    if ":" in _part:
+        _port, _bid = (x.strip() for x in _part.split(":", 1))
+        if _port.isdigit() and _bid in BUSES:
+            UDP_BUS_PORTS[int(_port)] = _bid
+
+
+def bus_name(bid):
+    return BUSES.get(bid, bid)
+
+
+def clean_bus(bid):
+    """Identificador de bus válido, o el bus por defecto."""
+    bid = (bid or "").strip()
+    return bid if re.fullmatch(r"[A-Za-z0-9_-]{1,20}", bid) else DEFAULT_BUS
+
+
 ACCOUNT_ID = os.environ.get("ACCOUNT_ID", "main")
 
 
@@ -58,8 +94,8 @@ PASSAGE_GAP_SECONDS = 300
 
 session_lock = threading.Lock()
 
-_last_packet_dt = None
-_active_session_id = None
+_last_packet_dt = {}       # bus -> hora del último paquete
+_active_session_id = {}    # bus -> recorrido (sesión) activo
 
 
 MAX_HISTORY_RANGE_POINTS = 3000
@@ -213,19 +249,36 @@ def init_db():
     conn.commit()
     cur.close()
     conn.close()
+    ensure_bus_columns()
 
 
-def start_new_session() -> str:
-    """Registra un nuevo recorrido de ACCOUNT_ID y devuelve su session_id.
+def ensure_bus_columns():
+    """Columna vehicle_id (qué bus) en locations y sessions. La corren writer y readers
+    al arrancar, así ningún proceso consulta la columna antes de que exista."""
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("ALTER TABLE locations ADD COLUMN IF NOT EXISTS vehicle_id TEXT")
+    cur.execute("ALTER TABLE sessions ADD COLUMN IF NOT EXISTS vehicle_id TEXT")
+    # La app de Android manda la batería del celular en % (Bat=87); el ESP32 la manda en voltios (Bat=3.95)
+    cur.execute("ALTER TABLE locations ADD COLUMN IF NOT EXISTS battery_pct INTEGER")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_locations_acc_vehicle ON locations (account_id, vehicle_id, id DESC)")
+    conn.commit()
+    cur.close()
+    conn.close()
+
+
+def start_new_session(bus: str = None) -> str:
+    """Registra un nuevo recorrido de un bus de ACCOUNT_ID y devuelve su session_id.
     Todo lo que se inserte después de esto queda "marcado" con esta sesión,
     así el mapa puede trazar solo el recorrido actual."""
+    bus = bus or DEFAULT_BUS
     now = now_local()
     session_id = now.strftime("%Y%m%d-%H%M%S") + "-" + uuid.uuid4().hex[:6]
     conn = get_connection()
     cur = conn.cursor()
     cur.execute(
-        "INSERT INTO sessions (session_id, account_id, started_at) VALUES (%s, %s, %s)",
-        (session_id, ACCOUNT_ID, now.strftime("%Y-%m-%d %H:%M:%S")),
+        "INSERT INTO sessions (session_id, account_id, started_at, vehicle_id) VALUES (%s, %s, %s, %s)",
+        (session_id, ACCOUNT_ID, now.strftime("%Y-%m-%d %H:%M:%S"), bus),
     )
     conn.commit()
     cur.close()
@@ -233,16 +286,17 @@ def start_new_session() -> str:
     return session_id
 
 
-def get_current_session_id():
-    """Sesión más reciente registrada para ACCOUNT_ID. La consulta cualquier
+def get_current_session_id(bus: str = None):
+    """Sesión más reciente de un bus de ACCOUNT_ID. La consulta cualquier
     proceso (writer o reader) directamente contra la BD — no depende de que
     sea el mismo proceso que la creó."""
+    bus = bus or DEFAULT_BUS
     with db_lock:
         conn = get_connection()
         cur = conn.cursor()
         cur.execute(
-            "SELECT session_id FROM sessions WHERE account_id = %s ORDER BY id DESC LIMIT 1",
-            (ACCOUNT_ID,),
+            f"SELECT session_id FROM sessions WHERE account_id = %s AND {VEH_SQL} = %s ORDER BY id DESC LIMIT 1",
+            (ACCOUNT_ID, bus),
         )
         row = cur.fetchone()
         cur.close()
@@ -250,15 +304,16 @@ def get_current_session_id():
     return row[0] if row else None
 
 
-def get_last_received_at():
-    """received_at del último punto guardado de ACCOUNT_ID, para saber
+def get_last_received_at(bus: str = None):
+    """received_at del último punto guardado de un bus, para saber
     cuánto tiempo llevaba el GPS callado la última vez que corrió el writer."""
+    bus = bus or DEFAULT_BUS
     with db_lock:
         conn = get_connection()
         cur = conn.cursor()
         cur.execute(
-            "SELECT received_at FROM locations WHERE account_id = %s ORDER BY id DESC LIMIT 1",
-            (ACCOUNT_ID,),
+            f"SELECT received_at FROM locations WHERE account_id = %s AND {VEH_SQL} = %s ORDER BY id DESC LIMIT 1",
+            (ACCOUNT_ID, bus),
         )
         row = cur.fetchone()
         cur.close()
@@ -266,7 +321,7 @@ def get_last_received_at():
     return row[0] if row else None
 
 
-def notify_session_start(session_id: str):
+def notify_session_start(session_id: str, bus: str = None):
     """Avisa en vivo (vía LISTEN/NOTIFY) a todas las páginas ya abiertas de
     esta cuenta que empezó una sesión nueva, para que borren el trazo sin
     necesidad de recargar la página."""
@@ -279,6 +334,7 @@ def notify_session_start(session_id: str):
             "type": "session_start",
             "session_id": session_id,
             "account_id": ACCOUNT_ID,
+            "bus": bus or DEFAULT_BUS,
         }),),
     )
     cur.close()
@@ -289,52 +345,51 @@ def init_session_tracking():
     """Se llama una vez al arrancar el writer. Retoma la sesión activa si el
     último paquete llegó hace poco, o abre una sesión nueva si no hay
     ninguna todavía o si el silencio ya superó SESSION_GAP_SECONDS."""
-    global _last_packet_dt, _active_session_id
-
-    existing_session_id = get_current_session_id()
-    last_received_at = get_last_received_at()
-
-    if existing_session_id is None:
-        _active_session_id = start_new_session()
-        notify_session_start(_active_session_id)
-        _last_packet_dt = None
-        return
-
-    _active_session_id = existing_session_id
-    _last_packet_dt = (
-        datetime.strptime(last_received_at, "%Y-%m-%d %H:%M:%S")
-        if last_received_at else None
-    )
+    for bus in BUSES:
+        existing_session_id = get_current_session_id(bus)
+        last_received_at = get_last_received_at(bus)
+        _active_session_id[bus] = existing_session_id
+        # Sin recorrido previo: el primer paquete de ese bus abre uno nuevo
+        _last_packet_dt[bus] = (
+            datetime.strptime(last_received_at, "%Y-%m-%d %H:%M:%S")
+            if existing_session_id and last_received_at else None
+        )
 
 
-def save_location(lat: float, lon: float, gps_time: str, extras: dict = None):
-    global _last_packet_dt, _active_session_id
+def save_location(lat: float, lon: float, gps_time: str, extras: dict = None, bus: str = None):
     extras = extras or {}
+    bus = clean_bus(bus)
 
     received_at_dt = now_local()
     received_at = received_at_dt.strftime("%Y-%m-%d %H:%M:%S")
 
 
     with session_lock:
-        if _last_packet_dt is None or (received_at_dt - _last_packet_dt).total_seconds() > SESSION_GAP_SECONDS:
-            _active_session_id = start_new_session()
-            notify_session_start(_active_session_id)
-        _last_packet_dt = received_at_dt
-        session_id = _active_session_id
+        last_dt = _last_packet_dt.get(bus)
+        if last_dt is None or not _active_session_id.get(bus) or \
+                (received_at_dt - last_dt).total_seconds() > SESSION_GAP_SECONDS:
+            _active_session_id[bus] = start_new_session(bus)
+            notify_session_start(_active_session_id[bus], bus)
+        _last_packet_dt[bus] = received_at_dt
+        session_id = _active_session_id[bus]
 
-    payload = {**location_to_payload(lat, lon, gps_time), "account_id": ACCOUNT_ID}
+    payload = {**location_to_payload(lat, lon, gps_time), "account_id": ACCOUNT_ID,
+               "bus": bus, "received_at": received_at}
     if extras.get("battery_v") is not None:
         payload["battery_pct"] = battery_pct(extras["battery_v"])
+    elif extras.get("battery_pct") is not None:
+        payload["battery_pct"] = extras["battery_pct"]
 
     with db_lock:
         conn = get_connection()
         cur = conn.cursor()
         cur.execute(
             "INSERT INTO locations (account_id, session_id, lat, lon, gps_time, received_at, "
-            "battery_v, signal_csq, seq) "
-            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)",
+            "battery_v, signal_csq, seq, vehicle_id, battery_pct) "
+            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
             (ACCOUNT_ID, session_id, lat, lon, gps_time, received_at,
-             extras.get("battery_v"), extras.get("signal_csq"), extras.get("seq")),
+             extras.get("battery_v"), extras.get("signal_csq"), extras.get("seq"), bus,
+             extras.get("battery_pct")),
         )
         cur.execute(
             f"NOTIFY {NOTIFY_CHANNEL}, %s",
@@ -345,14 +400,16 @@ def save_location(lat: float, lon: float, gps_time: str, extras: dict = None):
         conn.close()
 
 
-def get_latest_location():
-
+def get_latest_location(bus: str = None):
+    """Última ubicación de un bus: (lat, lon, gps_time, received_at)."""
+    bus = bus or DEFAULT_BUS
     with db_lock:
         conn = get_connection()
         cur = conn.cursor()
         cur.execute(
-            "SELECT lat, lon, gps_time FROM locations WHERE account_id = %s ORDER BY id DESC LIMIT 1",
-            (ACCOUNT_ID,),
+            f"SELECT lat, lon, gps_time, received_at FROM locations WHERE account_id = %s AND {VEH_SQL} = %s "
+            "ORDER BY id DESC LIMIT 1",
+            (ACCOUNT_ID, bus),
         )
         row = cur.fetchone()
         cur.close()
@@ -360,10 +417,11 @@ def get_latest_location():
     return row
 
 
-def get_history(limit: int = 1000):
-    """Recorrido de la sesión actual únicamente (el historial completo sigue
+def get_history(limit: int = 1000, bus: str = None):
+    """Recorrido actual de un bus únicamente (el historial completo sigue
     intacto en la tabla, solo no se muestra en el mapa)."""
-    session_id = get_current_session_id()
+    bus = bus or DEFAULT_BUS
+    session_id = get_current_session_id(bus)
     with db_lock:
         conn = get_connection()
         cur = conn.cursor()
@@ -375,8 +433,9 @@ def get_history(limit: int = 1000):
         else:
 
             cur.execute(
-                "SELECT lat, lon, gps_time FROM locations WHERE account_id = %s ORDER BY id DESC LIMIT %s",
-                (ACCOUNT_ID, limit),
+                f"SELECT lat, lon, gps_time FROM locations WHERE account_id = %s AND {VEH_SQL} = %s "
+                "ORDER BY id DESC LIMIT %s",
+                (ACCOUNT_ID, bus, limit),
             )
         rows = cur.fetchall()
         cur.close()
@@ -429,7 +488,7 @@ def get_sessions(limit: int = 50, start_dt: str = None, end_dt: str = None):
     params.append(limit)
 
     query = (
-        "SELECT session_id, MIN(gps_time), MAX(gps_time), COUNT(*) "
+        f"SELECT session_id, MIN(gps_time), MAX(gps_time), COUNT(*), MAX({VEH_SQL}) "
         "FROM locations WHERE account_id = %s AND session_id IS NOT NULL "
         "GROUP BY session_id " + having_clause +
         " ORDER BY MIN(gps_time) DESC LIMIT %s"
@@ -631,15 +690,16 @@ def parse_dt(text):
         return None
 
 
-def get_recent_locations(limit: int = 8):
-    """Últimas lecturas del bus, la más reciente primero."""
+def get_recent_locations(limit: int = 8, bus: str = None):
+    """Últimas lecturas de un bus, la más reciente primero."""
+    bus = bus or DEFAULT_BUS
     with db_lock:
         conn = get_connection()
         cur = conn.cursor()
         cur.execute(
             "SELECT lat, lon, gps_time, received_at FROM locations "
-            "WHERE account_id = %s ORDER BY id DESC LIMIT %s",
-            (ACCOUNT_ID, limit),
+            f"WHERE account_id = %s AND {VEH_SQL} = %s ORDER BY id DESC LIMIT %s",
+            (ACCOUNT_ID, bus, limit),
         )
         rows = cur.fetchall()
         cur.close()
@@ -695,11 +755,11 @@ def estimate_eta(blat, blon, ulat, ulon, speed_kmh):
     return meters / (kmh / 3.6), meters, 0, [(blat, blon), (ulat, ulon)]
 
 
-def compute_eta(blat, blon, ulat, ulon, speed_kmh):
+def compute_eta(blat, blon, ulat, ulon, speed_kmh, bus: str = None):
     # La llave es solo la zona del usuario (~100 m): mientras el bus avanza no se
     # vuelve a llamar a TomTom; el último resultado se escala con la distancia
     # en línea recta que le queda al bus (si se acercó un 10 %, el tiempo baja un 10 %).
-    key = (round(ulat, 3), round(ulon, 3))
+    key = (bus, round(ulat, 3), round(ulon, 3))   # cada bus tiene su propia caché
     now = time.time()
     straight_now = haversine_m(blat, blon, ulat, ulon)
     with _eta_cache_lock:
@@ -839,13 +899,13 @@ def build_metrics(days: int):
     # ---------- Bus: operación, calidad de los datos, batería y señal ----------
     try:
         rows = _query(
-            "SELECT lat, lon, gps_time, received_at, session_id, battery_v, signal_csq, seq "
-            "FROM locations WHERE account_id = %s AND received_at >= %s ORDER BY id ASC",
+            "SELECT lat, lon, gps_time, received_at, session_id, battery_v, signal_csq, seq, "
+            f"{VEH_SQL}, battery_pct FROM locations WHERE account_id = %s AND received_at >= %s ORDER BY id ASC",
             (ACCOUNT_ID, since_s),
         )
         extras_ok = True
     except Exception:
-        rows = [(*r, None, None, None) for r in _query(
+        rows = [(*r, None, None, None, DEFAULT_BUS, None) for r in _query(
             "SELECT lat, lon, gps_time, received_at, session_id "
             "FROM locations WHERE account_id = %s AND received_at >= %s ORDER BY id ASC",
             (ACCOUNT_ID, since_s),
@@ -858,15 +918,28 @@ def build_metrics(days: int):
     latencies = []
     hourly = {}
     battery_series, signal_series = [], []
-    prev = None
+    prev_by_bus = {}     # cada bus se compara con SU punto anterior (las tramas de los dos se mezclan)
     total_lost = 0
-    for lat, lon, gps_time, received_at, session_id, bat, csq, seq in rows:
+    bus_last = {}        # bus -> (received_at, batería, señal) más recientes
+    for lat, lon, gps_time, received_at, session_id, bat, csq, seq, vbus, bpct in rows:
+        prev = prev_by_bus.get(vbus)
+        pct_now = battery_pct(bat) if bat is not None else bpct   # voltios (ESP32) o % (celular)
+        bl = bus_last.setdefault(vbus, {"last_seen": None, "battery_v": None, "battery_pct": None,
+                                        "signal_csq": None, "points": 0})
+        bl["last_seen"] = received_at
+        bl["points"] += 1
+        if bat is not None:
+            bl["battery_v"] = bat
+        if pct_now is not None:
+            bl["battery_pct"] = pct_now
+        if csq is not None:
+            bl["signal_csq"] = csq
         rdt = parse_dt(received_at)
         gdt = parse_dt(gps_time)
         day = received_at[:10]
         d = per_day.get(day)
         if d is None:
-            prev = None
+            prev_by_bus[vbus] = None
             continue
         d["points"] += 1
         d["first"] = d["first"] or received_at[11:16]
@@ -880,8 +953,8 @@ def build_metrics(days: int):
         if rdt and (now - rdt).total_seconds() <= 24 * 3600:
             hk = rdt.strftime("%Y-%m-%d %H:00")
             hourly[hk] = hourly.get(hk, 0) + 1
-            if bat is not None:
-                battery_series.append({"t": received_at, "v": round(bat, 3), "pct": battery_pct(bat)})
+            if pct_now is not None:
+                battery_series.append({"t": received_at, "v": round(bat, 3) if bat is not None else None, "pct": pct_now})
             if csq is not None:
                 signal_series.append({"t": received_at, "csq": csq, "dbm": -113 + 2 * csq})
         if prev is not None and prev["session"] == session_id and gdt and prev["gdt"]:
@@ -900,7 +973,7 @@ def build_metrics(days: int):
                 if gap < 1000:
                     d["lost"] += gap
                     total_lost += gap
-        prev = {"lat": lat, "lon": lon, "gdt": gdt, "session": session_id, "seq": seq}
+        prev_by_bus[vbus] = {"lat": lat, "lon": lon, "gdt": gdt, "session": session_id, "seq": seq}
 
     days_out = []
     for d in per_day.values():
@@ -928,6 +1001,8 @@ def build_metrics(days: int):
     last_seen = last[3] if last else None
     last_dt = parse_dt(last_seen) if last_seen else None
     last_bat = next((r[5] for r in reversed(rows) if r[5] is not None), None)
+    last_pct = next((battery_pct(r[5]) if r[5] is not None else r[9]
+                     for r in reversed(rows) if r[5] is not None or r[9] is not None), None)
     last_csq = next((r[6] for r in reversed(rows) if r[6] is not None), None)
 
     # Autonomía: cuánto baja la batería por hora en las últimas 2 h
@@ -944,12 +1019,22 @@ def build_metrics(days: int):
         "last_seen": last_seen,
         "online": bool(last_dt and (now - last_dt).total_seconds() <= 60),
         "battery_v": round(last_bat, 2) if last_bat is not None else None,
-        "battery_pct": battery_pct(last_bat),
+        "battery_pct": last_pct,
         "battery_drain_pct_h": round(drain, 1) if drain else None,
-        "battery_hours_left": round(battery_pct(last_bat) / drain, 1) if drain and last_bat is not None else None,
+        "battery_hours_left": round(last_pct / drain, 1) if drain and last_pct is not None else None,
         "signal_csq": last_csq,
         "signal_dbm": -113 + 2 * last_csq if last_csq is not None else None,
         "extras_enabled": extras_ok,
+        # Estado de cada bus (la tarjeta grande muestra el que mandó más reciente)
+        "buses": [{
+            "id": b, "name": bus_name(b), "last_seen": bus_last.get(b, {}).get("last_seen"),
+            "online": bool(bus_last.get(b, {}).get("last_seen") and parse_dt(bus_last[b]["last_seen"])
+                           and (now - parse_dt(bus_last[b]["last_seen"])).total_seconds() <= 60),
+            "battery_v": round(bus_last[b]["battery_v"], 2) if bus_last.get(b, {}).get("battery_v") is not None else None,
+            "battery_pct": bus_last.get(b, {}).get("battery_pct"),
+            "signal_csq": bus_last.get(b, {}).get("signal_csq"),
+            "points": bus_last.get(b, {}).get("points", 0),
+        } for b in list(BUSES) + [x for x in bus_last if x not in BUSES]],
     }
     quality = {
         "received": received,
@@ -1135,27 +1220,36 @@ def parse_message(raw: str):
 
     datetime.strptime(gps_time, "%Y-%m-%d %H:%M:%S")
 
-    extras = {"battery_v": _opt_float(fields.get("Bat"), 2.0, 5.0)}
+    # Bat: entre 2 y 5 = voltios (ESP32); entre 5 y 100 = porcentaje (app de Android)
+    bat = _opt_float(fields.get("Bat"), 0, 100)
+    extras = {"battery_v": bat if bat is not None and 2.0 <= bat <= 5.0 else None,
+              "battery_pct": int(round(bat)) if bat is not None and bat > 5.0 else None}
     sig = _opt_float(fields.get("Sig"), 0, 31)
     extras["signal_csq"] = int(sig) if sig is not None else None
     seq = _opt_float(fields.get("Seq"), 0, 2_000_000_000)
     extras["seq"] = int(seq) if seq is not None else None
+    bid = fields.get("Id", "").strip()
+    extras["bus"] = bid if re.fullmatch(r"[A-Za-z0-9_-]{1,20}", bid) else None
     return lat, lon, gps_time, extras
 
 
-def udp_listener():
-
+def udp_listener(port: int = None, port_bus: str = None):
+    """Escucha tramas UDP. Si la trama trae "Id=", ese es el bus; si no (app de
+    Android), el bus es el del puerto (port_bus, o el primero en el puerto principal)."""
+    port = port or UDP_PORT
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    sock.bind(("0.0.0.0", UDP_PORT))
-    print(f"[UDP] (writer) Sniffer listening on 0.0.0.0:{UDP_PORT}")
+    sock.bind(("0.0.0.0", port))
+    print(f"[UDP] (writer) Sniffer listening on 0.0.0.0:{port} (bus por defecto: {port_bus or DEFAULT_BUS})")
     while True:
         try:
             data, addr = sock.recvfrom(1024)
             raw = data.decode("utf-8", errors="ignore")
             lat, lon, gps_time, extras = parse_message(raw)
-            save_location(lat, lon, gps_time, extras)
-            print(f"[UDP] (writer) {addr[0]} -> lat={lat} lon={lon} time={gps_time} "
-                  f"bat={extras['battery_v']} csq={extras['signal_csq']} seq={extras['seq']}")
+            bus = extras.pop("bus", None) or port_bus or DEFAULT_BUS
+            save_location(lat, lon, gps_time, extras, bus)
+            print(f"[UDP] (writer) {addr[0]} -> {bus} lat={lat} lon={lon} time={gps_time} "
+                  f"bat={extras['battery_v'] if extras['battery_v'] is not None else extras.get('battery_pct')} "
+                  f"csq={extras['signal_csq']} seq={extras['seq']}")
         except Exception as exc:
             print(f"[UDP] (writer) Ignored malformed packet: {exc}")
 
@@ -1187,29 +1281,43 @@ ASSET_V = str(int(time.time()))
 @app.route("/")
 def index():
     return render_template(
-        "index.html", role=ROLE, app_name=APP_NAME, asset_v=ASSET_V,
+        "index.html", role=ROLE, app_name=APP_NAME, asset_v=ASSET_V, buses=BUSES,
         route_name=ROUTE_NAME, bus_name=BUS_NAME, bus_name_lc=BUS_NAME[:1].lower() + BUS_NAME[1:],
-        page_config={"routeName": ROUTE_NAME, "busName": BUS_NAME},
+        page_config={"routeName": ROUTE_NAME, "busName": BUS_NAME,
+                     "buses": [{"id": b, "name": n} for b, n in BUSES.items()]},
     )
 
 
 @app.route("/api/latest")
 def api_latest():
-    row = get_latest_location()
-    if row is None:
-        return jsonify({"lat": None, "lon": None, "date": None, "time": None})
-    lat, lon, gps_time = row
-    return jsonify(location_to_payload(lat, lon, gps_time))
+    """Última ubicación de cada bus. Los campos de arriba (lat, lon...) son los del
+    bus que mandó más reciente, para que siga funcionando lo que ya los usaba."""
+    now = now_local()
+    buses = []
+    for bid in BUSES:
+        row = get_latest_location(bid)
+        if row is None:
+            continue
+        lat, lon, gps_time, received_at = row
+        rdt = parse_dt(received_at)
+        buses.append({**location_to_payload(lat, lon, gps_time), "bus": bid, "name": bus_name(bid),
+                      "received_at": received_at,
+                      "age_s": round((now - rdt).total_seconds()) if rdt else None})
+    if not buses:
+        return jsonify({"lat": None, "lon": None, "date": None, "time": None, "buses": []})
+    newest = max(buses, key=lambda b: b["received_at"] or "")
+    return jsonify({**newest, "buses": buses})
 
 
 @app.route("/api/session")
 def api_session():
-    return jsonify({"session_id": get_current_session_id()})
+    bus = clean_bus(request.args.get("bus"))
+    return jsonify({"session_id": get_current_session_id(bus), "bus": bus})
 
 
 @app.route("/api/history")
 def api_history():
-    rows = get_history()
+    rows = get_history(bus=clean_bus(request.args.get("bus")))
     points = [{"lat": lat, "lon": lon, "time": gps_time} for lat, lon, gps_time in rows]
     return jsonify(points)
 
@@ -1274,8 +1382,9 @@ def api_sessions():
 
     rows = get_sessions(limit, start_norm, end_norm)
     sessions = [
-        {"session_id": sid, "start_time": start, "end_time": end, "points": points}
-        for sid, start, end, points in rows
+        {"session_id": sid, "start_time": start, "end_time": end, "points": points,
+         "bus": bid, "bus_name": bus_name(bid)}
+        for sid, start, end, points, bid in rows
     ]
     return jsonify({"sessions": sessions})
 
@@ -1378,16 +1487,30 @@ def api_eta():
     if not (-90 <= ulat <= 90 and -180 <= ulon <= 180):
         return jsonify({"error": "Coordenadas fuera de rango"}), 400
 
-    rows = get_recent_locations()
+    results = [eta_for_bus(bid, ulat, ulon) for bid in BUSES]
+    # El "principal" es el que llega primero: ya llegó > en camino > sin señal > sin datos
+    rank = {"here": 0, "ok": 1, "offline": 2, "no_data": 3}
+    best = min(results, key=lambda r: (rank.get(r["status"], 9), r.get("eta_s") or 0))
+    if best["status"] == "here":
+        record_eta_usage(data.get("client_id"), 0, "here")
+    elif best["status"] == "ok":
+        record_eta_usage(data.get("client_id"), round(best["eta_s"] / 60, 1), best["source"])
+    return jsonify({**best, "buses": results})
+
+
+def eta_for_bus(bid, ulat, ulon):
+    """Tiempo de llegada de un bus hasta el usuario (mismo cálculo de antes, por bus)."""
+    out = {"bus_id": bid, "name": bus_name(bid)}
+    rows = get_recent_locations(bus=bid)
     if not rows:
-        return jsonify({"status": "no_data"})
+        return {**out, "status": "no_data"}
     blat, blon, gps_time, received_at = rows[0]
     last_dt = parse_dt(received_at)
     age = (now_local() - last_dt).total_seconds() if last_dt else None
-    base = {"bus": {"lat": blat, "lon": blon, "time": gps_time}, "last_seen": received_at,
+    base = {**out, "bus": {"lat": blat, "lon": blon, "time": gps_time}, "last_seen": received_at,
             "age_s": round(age) if age is not None else None}
     if age is None or age > ETA_BUS_MAX_AGE_S:
-        return jsonify({**base, "status": "offline"})
+        return {**base, "status": "offline"}
 
     straight = haversine_m(blat, blon, ulat, ulon)
     speed = recent_speed_kmh(rows)
@@ -1404,27 +1527,24 @@ def api_eta():
             break
 
     if straight <= ETA_HERE_M:
-        record_eta_usage(data.get("client_id"), 0, "here")
-        return jsonify({**base, "status": "here", "straight_m": round(straight), "trend": trend})
+        return {**base, "status": "here", "straight_m": round(straight), "trend": trend}
 
     # Método de cálculo según ETA_METHOD: modelo propio -> TomTom -> estimado
     result = ml_eta(rows, blat, blon, ulat, ulon, speed) if ETA_METHOD in ("auto", "ml") else None
     if result is None and ETA_METHOD in ("ml", "estimado"):
         result = (*estimate_eta(blat, blon, ulat, ulon, speed), "estimado")
     if result is None:
-        result = compute_eta(blat, blon, ulat, ulon, speed)
+        result = compute_eta(blat, blon, ulat, ulon, speed, bid)
     seconds, meters, delay, path, source = result
-    eta_min = seconds / 60
-    record_eta_usage(data.get("client_id"), round(eta_min, 1), source)
-    return jsonify({
+    return {
         **base, "status": "ok", "source": source,
-        "eta_s": round(seconds), "eta_min": max(1, round(eta_min)),
+        "eta_s": round(seconds), "eta_min": max(1, round(seconds / 60)),
         "distance_m": round(meters), "straight_m": round(straight),
         "traffic_delay_s": round(delay or 0),
         "bus_speed_kmh": round(speed, 1) if speed is not None else None,
         "trend": trend,
         "path": [[round(a, 6), round(b, 6)] for a, b in path],
-    })
+    }
 
 
 @app.route("/api/usage", methods=["POST"])
@@ -1455,8 +1575,9 @@ def enviar_page():
     """Página para el celular que va en el bus (oculta, con llave)."""
     if not _ingest_allowed(request.args.get("key", "")):
         return "Not Found", 404
-    return render_template("enviar.html", key=request.args.get("key", ""), bus_name=BUS_NAME,
-                           writer=IS_WRITER)
+    bus = clean_bus(request.args.get("bus"))
+    return render_template("enviar.html", key=request.args.get("key", ""), bus_name=bus_name(bus),
+                           bus_id=bus, writer=IS_WRITER)
 
 
 @app.route("/api/ingest", methods=["POST"])
@@ -1477,7 +1598,7 @@ def api_ingest():
         return jsonify({"error": "coordenadas fuera de rango"}), 400
     if acc > INGEST_MAX_ACC_M:
         return jsonify({"ok": False, "skipped": f"precisión {acc:.0f} m (máx {INGEST_MAX_ACC_M} m)"})
-    save_location(lat, lon, gps_time, {})
+    save_location(lat, lon, gps_time, {}, clean_bus(str(data.get("bus") or "")))
     return jsonify({"ok": True})
 
 
@@ -1524,8 +1645,16 @@ if __name__ == "__main__":
     if IS_WRITER:
         init_db()
         init_session_tracking()
-        print(f"[DB] (writer) Cuenta: {ACCOUNT_ID} | Sesión activa: {_active_session_id}")
+        print(f"[DB] (writer) Cuenta: {ACCOUNT_ID} | Buses: {BUSES} | Sesiones activas: {_active_session_id}")
         threading.Thread(target=udp_listener, daemon=True).start()
+        for _p, _b in UDP_BUS_PORTS.items():
+            if _p != UDP_PORT:
+                threading.Thread(target=udp_listener, args=(_p, _b), daemon=True).start()
+    else:
+        try:
+            ensure_bus_columns()
+        except Exception as exc:
+            print(f"[DB] ({ROLE}) No se pudo revisar la columna vehicle_id: {exc}")
     threading.Thread(target=listen_notifications, daemon=True).start()
     print(f"[HTTP] ({ROLE}) '{APP_NAME}' en http://0.0.0.0:{HTTP_PORT} (DB: {DB_NAME}@{DB_HOST}, cuenta: {ACCOUNT_ID}, tz: {APP_TZ.key})")
     app.run(host="0.0.0.0", port=HTTP_PORT, threaded=True)

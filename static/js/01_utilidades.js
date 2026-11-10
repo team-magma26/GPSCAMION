@@ -6,6 +6,10 @@ const $ = (id) => document.getElementById(id);
 const CFG = window.ONROUTE || {};
 const ROUTE_NAME = CFG.routeName || "Ruta";
 const BUS_NAME = CFG.busName || "Bus";   // "Bus de Luis": así la gente sabe a qué bus se monta
+// Todos los buses de la ruta (BUSES en el .env): [{id: "bus1", name: "Bus de Luis"}, {id: "bus2", name: "Bus de Andrés"}]
+const BUSES = Array.isArray(CFG.buses) && CFG.buses.length ? CFG.buses : [{ id: "bus1", name: BUS_NAME }];
+const MULTI_BUS = BUSES.length > 1;
+const NEXT_LABEL = MULTI_BUS ? "El próximo bus llega en" : `${BUS_NAME} llega en`;
 
 const PASSAGE_RADIUS_M = 200;
 const PAGE_SIZE = 5;

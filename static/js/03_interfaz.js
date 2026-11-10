@@ -67,10 +67,7 @@ function setView(v) {
   refreshTruckStatus();
   if (v !== "routes") stopSim();
 
-  if (prev === "live" && v !== "live") {
-    trail.setLatLngs([]);
-    if (map.hasLayer(marker)) map.removeLayer(marker);
-  }
+  if (prev === "live" && v !== "live") setLiveBusesVisible(false);
   if (v === "live" && prev !== "live") leaveHistory();
 
   if (v === "routes") {
@@ -91,20 +88,7 @@ function leaveHistory() {
   routesLoaded = false;
   clearRoutesTable();
   updateHistoryViewState();
-  if (!map.hasLayer(marker)) marker.addTo(map);
-  fetch("/api/history")
-    .then((r) => r.json())
-    .then((points) => {
-      setLastRouteFromPoints(points);
-      trail.setLatLngs(points.map((p) => [p.lat, p.lon]));
-      refreshTruckStatus();
-      if (points.length > 0) {
-        const last = points[points.length - 1];
-        marker.setLatLng([last.lat, last.lon]);
-        map.fitBounds(trail.getBounds(), { maxZoom: 15, padding: [20, 20] });
-      }
-    })
-    .catch(() => {});
+  loadLiveHistory(true);
 }
 
 $("modeLive").addEventListener("change", () => setView("live"));

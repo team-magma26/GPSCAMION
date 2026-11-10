@@ -63,6 +63,7 @@
 
 <script>
   const KEY = {{ key|tojson }};
+  const BUS = {{ bus_id|tojson }};   // qué bus es este celular (?bus=bus2 en la dirección)
   const PERIOD_MS = 10000;
   const $ = (id) => document.getElementById(id);
   let watchId = null, timer = null, wakeLock = null, lastPos = null;
@@ -91,7 +92,7 @@
     try {
       const r = await fetch("/api/ingest", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ key: KEY, lat: c.latitude, lon: c.longitude, acc: c.accuracy, time: fmt(lastPos.timestamp) }),
+        body: JSON.stringify({ key: KEY, bus: BUS, lat: c.latitude, lon: c.longitude, acc: c.accuracy, time: fmt(lastPos.timestamp) }),
       });
       const j = await r.json().catch(() => ({}));
       if (r.ok && j.ok) {

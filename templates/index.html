@@ -52,6 +52,15 @@
       <input type="radio" name="mode" id="modeHistory" tabindex="-1">
     </div>
     <div class="live-chip" id="liveChip"><i aria-hidden="true"></i>En vivo</div>
+    {% if buses|length > 1 %}
+    <!-- Qué buses ver en vivo: por defecto todos (lo maneja 05_envivo.js) -->
+    <div class="seg sm bus-filter" id="busFilter" role="radiogroup" aria-label="Qué buses ver">
+      <input type="radio" name="busf" id="bf-all" value="all" checked><label for="bf-all">Todos</label>
+      {% for bid, name in buses.items() %}
+      <input type="radio" name="busf" id="bf-{{ bid }}" value="{{ bid }}"><label for="bf-{{ bid }}"><span class="bus-swatch bs-{{ loop.index0 }}"></span>{{ name }}</label>
+      {% endfor %}
+    </div>
+    {% endif %}
     <button type="button" class="btn btn-quiet back-live d-none" id="backLive">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
       Volver a En vivo
@@ -102,7 +111,7 @@
       <section class="card welcome d-none" id="welcome" aria-labelledby="wlTitle">
         <svg class="wl-bus" viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="1.5" width="17" height="17" rx="3.5" fill="currentColor"/><rect x="5.5" y="17" width="3.5" height="4.5" rx="1.2" fill="currentColor"/><rect x="15" y="17" width="3.5" height="4.5" rx="1.2" fill="currentColor"/></svg>
         <div class="wl-route"><i></i>Costa Azul<span class="line"></span><i></i>Puerto Colombia</div>
-        <div class="wl-who">{{ route_name }} · {{ bus_name }}</div>
+        <div class="wl-who">{{ route_name }} · {{ buses.values()|join(" y ") }}</div>
         <h2 class="wl-title" id="wlTitle">Sigue tu bus en tiempo real</h2>
         <p class="wl-text">Mira dónde va el bus y cuánto le falta para llegar a donde estás. Sin registrarte.</p>
         <ol class="wl-steps">
@@ -118,7 +127,7 @@
 
       <!-- ¿CUÁNDO LLEGA EL BUS? (semana 2: ubicación del usuario + tráfico) -->
       <div id="etaPanel">
-        <div class="panel-title px-1">¿Cuándo llega el {{ bus_name_lc }}?
+        <div class="panel-title px-1">{% if buses|length > 1 %}¿Cuándo llega tu bus?{% else %}¿Cuándo llega el {{ bus_name_lc }}?{% endif %}
           <button type="button" class="info-btn" data-bs-toggle="popover" aria-label="Más información"
             data-bs-title="Tiempo de llegada" data-bs-content="Con tu ubicación calculamos cuánto tarda el bus en llegar hasta donde estás, por las calles y con el tráfico de este momento. Se actualiza cada 10 segundos. Tu ubicación no se guarda."></button>
         </div>
@@ -130,11 +139,12 @@
             <span class="badge rounded-pill eta-chip" id="etaChip">Buscando</span>
           </div>
           <div role="status" aria-live="polite" aria-atomic="true">
-            <div class="eta-label" id="etaLabel">{{ bus_name }} llega en</div>
+            <div class="eta-label" id="etaLabel">{% if buses|length > 1 %}El próximo bus llega en{% else %}{{ bus_name }} llega en{% endif %}</div>
             <div class="eta-main"><span class="eta-num" id="etaNum">--</span><span class="eta-unit" id="etaUnit"></span></div>
             <div class="eta-clock" id="etaClock"></div>
           </div>
           <div class="eta-facts" id="etaFacts"></div>
+          <div class="eta-others" id="etaOthers"></div>
           <div class="eta-sub" id="etaSub">Activa tu ubicación para saber cuánto tarda el bus en llegar a donde estás.</div>
           <div class="eta-note" id="etaNote"></div>
           <button class="btn btn-primary w-100 d-none" id="etaBtn">Usar mi ubicación</button>
@@ -147,20 +157,15 @@
           <button type="button" class="info-btn" data-bs-toggle="popover" aria-label="Más información"
             data-bs-title="En vivo" data-bs-content="Muestra dónde está el bus ahora mismo. El mapa se actualiza solo. El estado indica si el bus está en movimiento o detenido. Si lleva más de 1 minuto sin enviar datos, muestra su última ruta."></button>
         </div>
-        <div class="truck-status" id="truckStatus" data-state="last">
-          <span class="ts-dot"></span>
-          <div>
-            <div class="ts-title" id="truckStatusTitle">Última ruta del bus</div>
-            <div class="ts-sub" id="truckStatusSub">Cargando…</div>
-          </div>
-        </div>
+        <!-- Un renglón por bus (lo llena 05_envivo.js); tocarlo centra el mapa en ese bus -->
+        <div class="bus-status-list" id="busStatusList"></div>
         <p class="muted mb-3">Usa el botón <b>Seguir bus</b> del mapa para mantenerlo centrado.</p>
         <button class="btn btn-quiet btn-sm" id="clearTrail">Limpiar línea del recorrido</button>
       </div>
 
       <!-- ÚLTIMA UBICACIÓN (solo en vivo) -->
       <div class="card panel" id="statsCard">
-        <div class="panel-title">Última ubicación recibida</div>
+        <div class="panel-title">Última ubicación recibida <span class="last-bus" id="lastBusName"></span></div>
         <div class="row g-2">
           <div class="col-6 col-lg-12 col-xl-6"><div class="stat-tile" style="--c:#f4a261">
             <span class="stat-label">Fecha</span><span class="stat-value" id="date">--</span></div></div>
@@ -179,7 +184,7 @@
       <div class="card panel d-none" id="routesPanel">
         <div class="panel-title">Recorridos
           <button type="button" class="info-btn" data-bs-toggle="popover" aria-label="Más información"
-            data-bs-title="¿Qué es una ruta?" data-bs-content="Una ruta es un trayecto continuo del bus. Termina cuando pasa 1 minuto sin enviar datos, y el siguiente trayecto empieza como una ruta nueva. En el mapa, A es el inicio y B es el final. Marca las rutas que quieras ver."></button>
+            data-bs-title="¿Qué es un recorrido?" data-bs-content="Un recorrido es una vuelta completa de la ruta: el bus sale del punto de inicio, llega al extremo este, va hasta Puerto Colombia y regresa al punto de inicio. El tiempo que espera en el inicio no se cuenta. Si la vuelta todavía no termina, aparece como incompleta. En el mapa, A es la salida y B la llegada."></button>
         </div>
 
         <div class="row g-2">

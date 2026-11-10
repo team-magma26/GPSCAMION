@@ -154,7 +154,35 @@ aside > *:nth-child(2) { animation-delay: .06s; } aside > *:nth-child(3) { anima
   box-shadow: 0 3px 10px rgba(0,0,0,.35);
 }
 .leaflet-tooltip.bus-tag::before { border-top-color: #2f74e6; }
+/* Segundo bus: etiqueta en rojo para distinguirlo (su línea en el mapa también es roja) */
+.leaflet-tooltip.bus-tag-1 { color: #9b1c18; border-color: #e2322d; }
+.leaflet-tooltip.bus-tag-1::before { border-top-color: #e2322d; }
+
+/* Varios buses: renglón de estado por bus, color de cada bus y tiempos de los demás buses */
+.bus-status-list { display: grid; gap: 8px; margin-bottom: 12px; }
+.bus-status-list .truck-status { margin-bottom: 0; width: 100%; text-align: left; color: inherit; font: inherit; cursor: pointer; }
+.bus-status-list .truck-status.selected { outline: 2px solid color-mix(in srgb, var(--s) 70%, transparent); }
+.bus-status-list .ts-title { font-size: 16px; display: flex; align-items: center; gap: 8px; }
+.bus-swatch { display: inline-block; width: 12px; height: 12px; border-radius: 3px; flex-shrink: 0; }
+.bus-swatch.bs-0 { background: #4c8dff; } .bus-swatch.bs-1 { background: #e2322d; }
+.bus-swatch.bs-2 { background: #2ecc71; } .bus-swatch.bs-3 { background: #f4a261; }
+/* Selector "Todos · Bus de Luis · Bus de Andrés" junto a "En vivo" */
+.bus-filter label { display: inline-flex; align-items: center; gap: 6px; }
+.bus-filter .bus-swatch { width: 10px; height: 10px; }
+.last-bus { font-weight: 600; opacity: .75; }
+.eta-others { display: grid; gap: 6px; margin-top: 10px; }
+.eta-others:empty { display: none; }
+.eta-other {
+  display: flex; align-items: center; gap: 8px; width: 100%; padding: 8px 10px; border-radius: 10px;
+  border: 1px solid rgba(255,255,255,.18); background: rgba(255,255,255,.08); color: inherit; font: inherit; text-align: left; cursor: pointer;
+}
+.eta-other .eo-name { flex: 1; font-weight: 600; }
+.eta-other .eo-val { font-variant-numeric: tabular-nums; }
 
 /* Ruta y bus en la bienvenida */
 .wl-who { font-weight: 700; font-size: 14px; color: #fff; opacity: .92; margin: 4px 0 6px; }
 .brand .route-name { color: #fff; font-weight: 700; }
+
+/* Tabla de recorridos: una vuelta sin terminar (en curso o con datos cortados) */
+.route-tag { display: inline-block; margin-left: 6px; padding: 0 7px; border-radius: 999px; font-size: 11px; font-weight: 600;
+  color: #e5a23b; border: 1px solid color-mix(in srgb, #e5a23b 60%, transparent); }

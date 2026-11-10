@@ -59,21 +59,49 @@ function etaSetMapLayers(show) {
   });
 }
 
+// Lista con el tiempo de los demás buses (debajo del principal, que es el que llega primero)
+function etaShort(it) {
+  if (it.status === "ok") return `${it.trend === "leaving" ? "se aleja · " : ""}<b>${it.eta_min} min</b>`;
+  if (it.status === "here") return "<b>¡Ya llega!</b>";
+  if (it.status === "offline") return "sin señal";
+  return "aún no sale";
+}
+let lastEta = null; // última respuesta de /api/eta (para redibujar al cambiar el selector de buses)
+function showOthers(d) {
+  const others = busFilter !== "all" ? [] : (d.buses || []).filter((it) => it.bus_id !== d.bus_id);
+  $("etaOthers").innerHTML = others.map((it) => {
+    const b = getBus(it.bus_id);
+    return `<button type="button" class="eta-other" data-bus="${b.id}" title="Ver ${b.name} en el mapa">
+      <span class="bus-swatch" style="background:${b.color}"></span><span class="eo-name">${b.name}</span>
+      <span class="eo-val">${etaShort(it)}</span></button>`;
+  }).join("");
+  $("etaOthers").querySelectorAll("[data-bus]").forEach((el) => el.addEventListener("click", () => focusOn(el.dataset.bus)));
+}
+
 function showEta(d) {
   if (d.error) { setEta("off", { chip: "Error", label: "No pudimos calcular", num: "Inténtalo de nuevo", textMain: true, sub: d.error }); return; }
+  lastEta = d;
+  // Si se eligió un solo bus, la tarjeta muestra ese bus (no el que llega primero)
+  if (busFilter !== "all" && d.buses) {
+    const sel = d.buses.find((it) => it.bus_id === busFilter);
+    if (sel) d = { ...sel, buses: d.buses };
+  }
+  showOthers(d);
+  const name = d.name || BUS_NAME;
   if (d.status !== "ok") etaLine.setLatLngs([]);
   if (d.status === "no_data") {
-    setEta("off", { chip: "Sin datos", label: BUS_NAME, num: "Aún no sale", textMain: true, sub: "El bus todavía no ha enviado su ubicación." });
+    setEta("off", { chip: "Sin datos", label: MULTI_BUS ? "Buses de la ruta" : name, num: "Aún no salen", textMain: true,
+      sub: MULTI_BUS ? "Los buses todavía no han enviado su ubicación." : "El bus todavía no ha enviado su ubicación." });
     return;
   }
   if (d.status === "offline") {
-    setEta("off", { chip: "Sin señal", label: BUS_NAME, num: "Sin señal", textMain: true,
-      sub: `El bus no envía datos desde ${fmtAgo(d.age_s * 1000)}. El tiempo aparece apenas vuelva a conectarse.` });
+    setEta("off", { chip: "Sin señal", label: name, num: "Sin señal", textMain: true,
+      sub: `No envía datos desde ${fmtAgo(d.age_s * 1000)}. El tiempo aparece apenas vuelva a conectarse.` });
     return;
   }
   if (d.status === "here") {
-    setEta("here", { chip: "Llegando", label: "Prepárate", num: "¡Ya llega!", textMain: true,
-      sub: `El bus está a <b>${fmtDistance(d.straight_m)}</b> de ti.` });
+    setEta("here", { chip: "Llegando", label: `Prepárate · ${name}`, num: "¡Ya llega!", textMain: true,
+      sub: `${name} está a <b>${fmtDistance(d.straight_m)}</b> de ti.` });
     return;
   }
 
@@ -88,7 +116,7 @@ function showEta(d) {
   if (d.trend === "stopped") facts.push({ icon: "pause", text: "Detenido" });
   setEta(leaving ? "leaving" : "ok", {
     chip: leaving ? "Se aleja" : d.eta_min <= 3 ? "Muy cerca" : "En camino",
-    label: `${BUS_NAME} llega en`,
+    label: `${name} llega en`,
     num: String(d.eta_min), unit: "min",
     clock: `Hacia las <b>${fmtClock(Date.now() + d.eta_s * 1000)}</b>`,
     facts,
@@ -102,7 +130,7 @@ function showEta(d) {
   if (!etaFitted && !historyMode && d.path && d.path.length) {
     etaFitted = true;
     setFollow(false);
-    map.fitBounds(L.latLngBounds(d.path).extend(marker.getLatLng()), { padding: [40, 40], maxZoom: 16 });
+    map.fitBounds(L.latLngBounds(d.path).extend(getBus(d.bus_id).marker.getLatLng()), { padding: [40, 40], maxZoom: 16 });
   }
 }
 
@@ -116,7 +144,7 @@ function requestEta() {
   })
     .then((r) => r.json())
     .then(showEta)
-    .catch(() => setEta("off", { chip: "Sin conexión", label: BUS_NAME, num: "Reintentando…", textMain: true, sub: "No pudimos calcular el tiempo de llegada. Volvemos a intentar en 10 s." }))
+    .catch(() => setEta("off", { chip: "Sin conexión", label: MULTI_BUS ? "Buses de la ruta" : BUS_NAME, num: "Reintentando…", textMain: true, sub: "No pudimos calcular el tiempo de llegada. Volvemos a intentar en 10 s." }))
     .finally(() => { etaBusy = false; });
 }
 
@@ -130,14 +158,16 @@ function onUserPosition(pos) {
   logGeoOnce("geo_granted");
   $("etaBtn").classList.add("d-none");
   if (first) {
-    setEta("wait", { chip: "Calculando", label: `${BUS_NAME} llega en`, num: "Calculando…", textMain: true, sub: "Ya tenemos tu ubicación." });
-    // Muestra al usuario en el mapa junto con el bus (si el bus no tiene datos, centra en el usuario)
+    setEta("wait", { chip: "Calculando", label: NEXT_LABEL, num: "Calculando…", textMain: true, sub: "Ya tenemos tu ubicación." });
+    // Muestra al usuario en el mapa junto con los buses (si no hay buses con datos, centra en el usuario)
     if (!historyMode) {
       setFollow(false);
-      const busLL = marker.getLatLng();
-      const hasBus = busLL && (busLL.lat !== 4.6 || busLL.lng !== -74.08);
-      if (hasBus) map.fitBounds(L.latLngBounds([[userPos.lat, userPos.lon], [busLL.lat, busLL.lng]]), { padding: [60, 60], maxZoom: 16 });
-      else map.setView([userPos.lat, userPos.lon], 16);
+      const withPos = busList().filter((b) => b.hasPos);
+      if (withPos.length) {
+        const bounds = L.latLngBounds([[userPos.lat, userPos.lon]]);
+        withPos.forEach((b) => bounds.extend(b.marker.getLatLng()));
+        map.fitBounds(bounds, { padding: [60, 60], maxZoom: 16 });
+      } else map.setView([userPos.lat, userPos.lon], 16);
     }
   }
   if (first || Date.now() - lastEtaAt > 5000) requestEta();
@@ -164,7 +194,7 @@ function startGeolocation() {
       sub: "Este navegador no permite usar tu ubicación en esta página (necesita https)." });
     return;
   }
-  setEta("wait", { chip: "Buscando", label: `${BUS_NAME} llega en`, num: "Ubicándote…", textMain: true,
+  setEta("wait", { chip: "Buscando", label: NEXT_LABEL, num: "Ubicándote…", textMain: true,
     sub: "Si el navegador pregunta, toca <b>Permitir</b> para calcular cuánto tarda el bus en llegar a ti." });
   $("etaBtn").classList.add("d-none");
   if (geoWatch !== null) navigator.geolocation.clearWatch(geoWatch);

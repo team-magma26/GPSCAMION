@@ -96,6 +96,14 @@
   .split .meter { margin: 0; }
   .split b { text-align: right; font-variant-numeric: tabular-nums; }
   .split span { color: var(--muted); }
+  .bus-rows { margin-top: 14px; border-top: 1px solid var(--line); }
+  .bus-rows:empty { display: none; }
+  .bus-row { display: grid; grid-template-columns: 1fr auto auto; gap: 12px; align-items: center; padding: 9px 0; font-size: 14px; }
+  .bus-row + .bus-row { border-top: 1px solid var(--line); }
+  .bus-row .bn { font-weight: 700; display: flex; align-items: center; gap: 8px; }
+  .bus-row .bn i { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+  .bus-row .bn i.on { background: var(--accent); }
+  .bus-row span { color: var(--muted); font-variant-numeric: tabular-nums; }
   @media (min-width: 1200px) { .hero-row { flex: 1; } }
   @media (max-width: 575px) { .big { font-size: 24px; } .ring { width: 100px; height: 100px; } .hero-num { font-size: 24px; } }
   /* Componentes de Bootstrap (.card, .table) con el tema de la página */
@@ -155,6 +163,8 @@
           <div class="fact"><b><span class="bars" id="sigBars" aria-hidden="true"><i></i><i></i><i></i><i></i></span><span id="mSig">--</span></b><span id="mSigSub">señal celular</span></div>
           <div class="fact"><b id="mLat">--</b><span id="mLatSub">retraso de los datos</span></div>
         </div>
+        <!-- Estado de cada bus (cuando hay más de uno) -->
+        <div class="bus-rows" id="mBuses"></div>
       </div>
     </div>
     <div class="col-12 col-xl-7">
@@ -327,6 +337,13 @@
     $("updated").textContent = `actualizado ${hhmm(m.generated_at)} · se renueva cada minuto`;
 
     // ---- Dispositivo ----
+    // Un renglón por bus: en línea o no, último dato, batería y señal
+    const bl = d.buses || [];
+    $("mBuses").innerHTML = bl.length > 1 ? bl.map((b) => `<div class="bus-row">
+        <div class="bn"><i class="${b.online ? "on" : ""}"></i>${b.name}</div>
+        <span>${b.last_seen ? agoText(b.last_seen, m.generated_at) : "sin datos"}</span>
+        <span>${b.battery_pct === null ? "--" : b.battery_pct + " %"}${b.signal_csq === null ? "" : " · CSQ " + b.signal_csq}</span>
+      </div>`).join("") : "";
     $("mStatusPill").classList.toggle("on", d.online);
     $("mStatus").textContent = d.online ? "En línea" : "Sin conexión";
     $("mLastSeen").textContent = d.last_seen ? `Último dato ${agoText(d.last_seen, m.generated_at)} (${d.last_seen.slice(5, 16).replace("-", "/")})` : "Todavía no ha enviado datos";
@@ -337,7 +354,7 @@
     $("batRing").setAttribute("aria-label", pct === null ? "Batería sin dato" : `Batería ${pct} por ciento`);
     $("mBat").textContent = pct === null ? "--" : `${pct}%`;
     $("mBatTitle").textContent = pct === null ? "Batería sin medir" : pct > 40 ? "Batería bien" : pct > 15 ? "Batería media" : "Batería baja";
-    $("mBatSub").textContent = d.battery_v === null ? "El dispositivo aún no envía el voltaje."
+    $("mBatSub").textContent = d.battery_v === null ? (pct === null ? "El dispositivo aún no envía la batería." : "Batería del celular (app de respaldo)")
       : `${fmt(d.battery_v, 2)} V` + (d.battery_hours_left ? ` · quedan ~${fmt(d.battery_hours_left, 1)} h` : "");
 
     const si = signalInfo(d.signal_csq);

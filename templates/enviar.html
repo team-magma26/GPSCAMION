@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>OnRoute · Enviar ubicación del bus</title>
+<style>
+  :root { --bg: #0f1420; --card: #182030; --line: #2a3448; --text: #eef2f8; --muted: #9aa6ba; --blue: #2f74e6; --red: #e5484d; --ok: #3fb27f; --warn: #e5a23b; }
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100vh; background: var(--bg); color: var(--text); font: 16px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; padding: 20px 16px 40px; }
+  main { max-width: 460px; margin: 0 auto; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 18px; font-size: 14px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px; margin-bottom: 14px; }
+  button { width: 100%; border: 0; border-radius: 12px; padding: 18px; font-size: 18px; font-weight: 700; color: #fff; background: var(--blue); cursor: pointer; }
+  button.stop { background: var(--red); }
+  .state { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 18px; }
+  .dot { width: 12px; height: 12px; border-radius: 50%; background: var(--muted); flex-shrink: 0; }
+  .on .dot { background: var(--ok); box-shadow: 0 0 0 4px rgba(63,178,127,.25); }
+  .warn .dot { background: var(--warn); }
+  .err .dot { background: var(--red); }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 14px; }
+  .grid div { background: rgba(255,255,255,.03); border-radius: 8px; padding: 10px; }
+  .grid b { display: block; font-size: 20px; }
+  .grid span { color: var(--muted); font-size: 13px; }
+  ul { margin: 0; padding-left: 18px; color: var(--muted); font-size: 14px; }
+  li + li { margin-top: 6px; }
+  #log { color: var(--muted); font-size: 13px; margin-top: 10px; min-height: 1.4em; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Enviar ubicación · {{ bus_name }}</h1>
+  <p class="sub">Respaldo: este celular hace de GPS del bus mientras el módem está en reparación.</p>
+
+  {% if not writer %}
+  <div class="card err"><div class="state"><i class="dot"></i>Esta instancia no es el writer</div>
+    <p class="sub" style="margin:8px 0 0">Abre esta página en el dominio del writer de main.</p></div>
+  {% endif %}
+
+  <div class="card" id="stateCard">
+    <div class="state"><i class="dot"></i><span id="stateTxt">Detenido</span></div>
+    <div class="grid">
+      <div><b id="sent">0</b><span>enviadas</span></div>
+      <div><b id="acc">--</b><span>precisión del GPS</span></div>
+      <div><b id="last">--</b><span>último envío</span></div>
+      <div><b id="fails">0</b><span>fallos / descartadas</span></div>
+    </div>
+    <div id="log"></div>
+  </div>
+
+  <button id="btn">Empezar a enviar</button>
+
+  <div class="card" style="margin-top:14px">
+    <ul>
+      <li>Deja <b>esta página abierta y la pantalla prendida</b>. Si cambias de app o se bloquea el celular, deja de enviar.</li>
+      <li>Ponlo cerca de una ventana y <b>conectado al cargador</b>.</li>
+      <li>Envía una ubicación cada 10 s. Si el GPS tiene más de 60 m de error, la descarta.</li>
+    </ul>
+  </div>
+</main>
+
+<script>
+  const KEY = {{ key|tojson }};
+  const BUS = {{ bus_id|tojson }};   // qué bus es este celular (?bus=bus2 en la dirección)
+  const PERIOD_MS = 10000;
+  const $ = (id) => document.getElementById(id);
+  let watchId = null, timer = null, wakeLock = null, lastPos = null;
+  let sent = 0, fails = 0;
+
+  const pad = (n) => String(n).padStart(2, "0");
+  function fmt(ts) {             // hora local del celular (Colombia) en el formato del servidor
+    const d = new Date(ts);
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+  }
+  function setState(cls, txt) { $("stateCard").className = "card " + cls; $("stateTxt").textContent = txt; }
+
+  async function keepAwake() {
+    try { if ("wakeLock" in navigator) wakeLock = await navigator.wakeLock.request("screen"); } catch (e) { /* no disponible */ }
+  }
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible" && watchId !== null) keepAwake();
+    if (document.visibilityState === "hidden" && watchId !== null) setState("warn", "En pausa: vuelve a esta página");
+  });
+
+  async function sendNow() {
+    if (!lastPos) { setState("warn", "Esperando señal GPS…"); return; }
+    const age = Date.now() - lastPos.timestamp;
+    if (age > 30000) { setState("warn", "GPS sin actualizar…"); return; }
+    const c = lastPos.coords;
+    try {
+      const r = await fetch("/api/ingest", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key: KEY, bus: BUS, lat: c.latitude, lon: c.longitude, acc: c.accuracy, time: fmt(lastPos.timestamp) }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (r.ok && j.ok) {
+        sent++; $("sent").textContent = sent; $("last").textContent = fmt(Date.now()).slice(11);
+        setState("on", "Enviando");
+        $("log").textContent = "";
+      } else {
+        fails++; $("fails").textContent = fails;
+        $("log").textContent = j.skipped ? `Descartada: ${j.skipped}` : (j.error || `Error ${r.status}`);
+        if (!j.skipped) setState("err", "El servidor no la aceptó");
+      }
+    } catch (e) {
+      fails++; $("fails").textContent = fails;
+      setState("err", "Sin internet, reintentando…");
+    }
+  }
+
+  function start() {
+    if (!navigator.geolocation) { setState("err", "Este navegador no tiene GPS"); return; }
+    watchId = navigator.geolocation.watchPosition(
+      (p) => { lastPos = p; $("acc").textContent = `${Math.round(p.coords.accuracy)} m`; },
+      (e) => { setState("err", e.code === 1 ? "Permiso de ubicación negado" : "No se pudo leer el GPS"); },
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 }
+    );
+    keepAwake();
+    timer = setInterval(sendNow, PERIOD_MS);
+    setState("warn", "Esperando señal GPS…");
+    $("btn").textContent = "Detener"; $("btn").className = "stop";
+  }
+
+  function stop() {
+    if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+    clearInterval(timer); watchId = null; timer = null;
+    try { if (wakeLock) wakeLock.release(); } catch (e) {}
+    setState("", "Detenido");
+    $("btn").textContent = "Empezar a enviar"; $("btn").className = "";
+  }
+
+  $("btn").addEventListener("click", () => (watchId === null ? start() : stop()));
+  window.addEventListener("beforeunload", (e) => { if (watchId !== null) { e.preventDefault(); e.returnValue = ""; } });
+</script>
+</body>
+</html>

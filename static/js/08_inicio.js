@@ -8,29 +8,10 @@ refreshTruckStatus();
 setInterval(refreshTruckStatus, 5000);
 
 // ---------- Carga inicial en vivo ----------
-fetch("/api/history")
-  .then((r) => r.json())
-  .then((points) => {
-    setLastRouteFromPoints(points);
-    if (historyMode) return;
-    const latlngs = points.map((p) => [p.lat, p.lon]);
-    trail.setLatLngs(latlngs);
-    refreshTruckStatus();
-    if (latlngs.length > 0) {
-      marker.setLatLng(latlngs[latlngs.length - 1]);
-      map.fitBounds(trail.getBounds(), { maxZoom: 15, padding: [20, 20] });
-      mapCentered = true;
-    }
-  })
-  .catch(() => {});
-
-fetch("/api/latest")
-  .then((r) => r.json())
-  .then((data) => {
-    updateFields(data);
-    if (data.lat !== null && data.lon !== null) updateMap(data.lat, data.lon, false);
-  })
-  .catch(() => {});
+loadLiveHistory(true);   // recorrido actual de cada bus
+loadLatest();            // última ubicación de cada bus
+// Al volver a la pestaña (el celular pausa la conexión en vivo) se actualiza todo de una vez
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") loadLatest(); });
 
 const source = new EventSource("/events");
 
@@ -38,18 +19,17 @@ source.onmessage = (event) => {
   const data = JSON.parse(event.data);
 
   if (data.type === "session_start") {
-    lastRoute.start = null;
-    if (!historyMode) {
-      trail.setLatLngs([]);
-      mapCentered = false;
-    }
-    $("status").textContent = "Nueva sesión de recorrido iniciada";
+    // Un bus empezó un recorrido nuevo: se borra solo SU línea
+    const b = getBus(data.bus);
+    b.lastRoute.start = null;
+    if (!historyMode) b.trail.setLatLngs([]);
+    $("status").textContent = `Nuevo recorrido de ${b.name}`;
     return;
   }
 
-  updateFields(data);
+  if (isShown(getBus(data.bus))) updateFields(data);
   if (data.lat !== null && data.lon !== null) trackTruck(data.lat, data.lon, data);
-  if (data.lat !== null && data.lon !== null && !historyMode) updateMap(data.lat, data.lon, true);
+  if (data.lat !== null && data.lon !== null && !historyMode) updateMap(data.lat, data.lon, true, data.bus);
   if (data.lat !== null && data.lon !== null) etaOnBusUpdate();
 };
 
@@ -76,8 +56,8 @@ if (welcomed) {
   startGeolocation();
 } else {
   $("welcome").classList.remove("d-none");
-  setEta("wait", { chip: "Listo", label: `${BUS_NAME} llega en`, num: "Toca Empezar", textMain: true,
-    sub: "Con tu ubicación te decimos en cuántos minutos llega el bus." });
+  setEta("wait", { chip: "Listo", label: NEXT_LABEL, num: "Toca Empezar", textMain: true,
+    sub: MULTI_BUS ? "Con tu ubicación te decimos en cuántos minutos llega cada bus." : "Con tu ubicación te decimos en cuántos minutos llega el bus." });
 }
 $("wlStart").addEventListener("click", () => { closeWelcome(); startGeolocation(); });
 $("wlSkip").addEventListener("click", () => {

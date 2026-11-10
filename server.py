@@ -60,6 +60,26 @@ for _part in os.environ.get("UDP_BUS_PORTS", "").split(","):
             UDP_BUS_PORTS[int(_port)] = _bid
 
 
+def _parse_point(text, default_radius=None):
+    """"11.0206,-74.868067" o "11.0206,-74.868067,300" -> (lat, lon, radio_m)"""
+    try:
+        parts = [float(x) for x in text.split(",")]
+        return (parts[0], parts[1], parts[2] if len(parts) > 2 else default_radius)
+    except (ValueError, IndexError):
+        return None
+
+
+# ---------- Vueltas de la ruta (cómo se separan los recorridos en la tabla) ----------
+# Una vuelta = sale del punto de inicio, pasa por cada punto de paso (extremo este y
+# Puerto Colombia) y regresa al punto de inicio. Medido con los datos reales del 10 de noviembre.
+ROUTE_START = _parse_point(os.environ.get("ROUTE_START", "11.0206,-74.868067,150"), 150)
+ROUTE_WAYPOINTS = [w for w in (_parse_point(x, 300) for x in os.environ.get(
+    "ROUTE_WAYPOINTS", "11.020238,-74.84887,300;10.986705,-74.959867,600").split(";") if x.strip()) if w]
+ROUTE_LOOPS = bool(ROUTE_START and ROUTE_WAYPOINTS) and os.environ.get("ROUTE_LOOPS", "1") != "0"
+LOOPS_DEFAULT_DAYS = 30          # sin filtro de fechas, la tabla busca vueltas de los últimos 30 días
+LOOP_MIN_POINTS = 30             # un tramo incompleto con menos puntos no se muestra
+
+
 def bus_name(bid):
     return BUSES.get(bid, bid)
 
@@ -504,9 +524,83 @@ def get_sessions(limit: int = 50, start_dt: str = None, end_dt: str = None):
     return rows
 
 
+def _bus_points(bus, start_dt, end_dt):
+    """Puntos de un bus entre dos fechas, ordenados por la hora del GPS."""
+    with db_lock:
+        conn = get_connection()
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT lat, lon, gps_time, received_at FROM locations "
+            f"WHERE account_id = %s AND {VEH_SQL} = %s AND gps_time BETWEEN %s AND %s "
+            "ORDER BY gps_time ASC",
+            (ACCOUNT_ID, bus, start_dt, end_dt),
+        )
+        rows = cur.fetchall()
+        cur.close()
+        conn.close()
+    return rows
+
+
+def find_loops(rows):
+    """Separa los puntos de un bus en vueltas. Recorre los puntos en orden:
+      - mientras está en el punto de inicio, la salida es el último punto ahí;
+      - al salir, marca cada punto de paso que visita;
+      - si vuelve al inicio habiendo visitado TODOS los puntos de paso, es una vuelta completa
+        (de la salida a la llegada; el tiempo de espera en el inicio no se cuenta).
+    Pasar por el inicio a mitad de vuelta (sin haber llegado a Puerto Colombia) no la corta.
+    Devuelve [(inicio, fin, n_puntos, completa)] con las horas del GPS."""
+    slat, slon, srad = ROUTE_START
+    loops = []
+    dep_i = None            # índice de la salida (último punto en el inicio)
+    visited = set()
+    for i, (lat, lon, gps_time, _) in enumerate(rows):
+        at_start = haversine_m(slat, slon, lat, lon) <= srad
+        if at_start:
+            if dep_i is not None and len(visited) == len(ROUTE_WAYPOINTS):
+                loops.append((rows[dep_i][2], gps_time, i - dep_i + 1, True))
+                visited = set()
+            elif dep_i is not None and visited:
+                pass        # pasó por el inicio a mitad de vuelta: sigue la misma vuelta
+            else:
+                visited = set()
+            if not visited:
+                dep_i = i   # sigue esperando en el inicio: la salida se corre a este punto
+            continue
+        if dep_i is None:
+            continue        # todavía no ha pasado por el inicio
+        for k, (wlat, wlon, wrad) in enumerate(ROUTE_WAYPOINTS):
+            if haversine_m(wlat, wlon, lat, lon) <= wrad:
+                visited.add(k)
+    # Vuelta sin terminar (en curso, o se cortaron los datos)
+    if dep_i is not None and len(rows) - dep_i >= LOOP_MIN_POINTS and visited:
+        loops.append((rows[dep_i][2], rows[-1][2], len(rows) - dep_i, False))
+    return loops
+
+
+def get_loops(start_dt=None, end_dt=None, limit=50):
+    """Vueltas de todos los buses en un rango (por defecto, los últimos 30 días)."""
+    end_dt = end_dt or now_local().strftime("%Y-%m-%d %H:%M:%S")
+    start_dt = start_dt or (now_local() - timedelta(days=LOOPS_DEFAULT_DAYS)).strftime("%Y-%m-%d %H:%M:%S")
+    out = []
+    for bus in BUSES:
+        for t0, t1, n, complete in find_loops(_bus_points(bus, start_dt, end_dt)):
+            out.append({"session_id": f"v|{bus}|{t0}|{t1}", "start_time": t0, "end_time": t1,
+                        "points": n, "bus": bus, "bus_name": bus_name(bus),
+                        "kind": "vuelta" if complete else "incompleta"})
+    out.sort(key=lambda x: x["start_time"], reverse=True)
+    return out[:limit]
+
+
 def get_session_route(session_id: str, max_points: int = MAX_HISTORY_RANGE_POINTS):
     """Puntos de un recorrido (sesión) específico ya registrado, ordenados
-    por gps_time, para dibujarlo en el mapa igual que get_history_range()."""
+    por gps_time, para dibujarlo en el mapa igual que get_history_range().
+    Una vuelta tiene id "v|bus|inicio|fin": se devuelven los puntos de ese bus entre esas horas."""
+    if session_id.startswith("v|"):
+        try:
+            _, bus, t0, t1 = session_id.split("|")
+        except ValueError:
+            return []
+        return _bus_points(clean_bus(bus), t0, t1)[:max_points]
     with db_lock:
         conn = get_connection()
         cur = conn.cursor()
@@ -1379,6 +1473,10 @@ def api_sessions():
 
     if start_norm and start_norm > now_local().strftime("%Y-%m-%d %H:%M:%S"):
         return jsonify({"error": "La fecha/hora 'desde' no puede ser futura"}), 400
+
+    if ROUTE_LOOPS and request.args.get("modo") != "sesiones":
+        # Recorridos = vueltas completas de la ruta (inicio -> extremo este -> Puerto Colombia -> inicio)
+        return jsonify({"sessions": get_loops(start_norm, end_norm, limit), "modo": "vueltas"})
 
     rows = get_sessions(limit, start_norm, end_norm)
     sessions = [

@@ -66,8 +66,9 @@ function etaShort(it) {
   if (it.status === "offline") return "sin señal";
   return "aún no sale";
 }
+let lastEta = null; // última respuesta de /api/eta (para redibujar al cambiar el selector de buses)
 function showOthers(d) {
-  const others = (d.buses || []).filter((it) => it.bus_id !== d.bus_id);
+  const others = busFilter !== "all" ? [] : (d.buses || []).filter((it) => it.bus_id !== d.bus_id);
   $("etaOthers").innerHTML = others.map((it) => {
     const b = getBus(it.bus_id);
     return `<button type="button" class="eta-other" data-bus="${b.id}" title="Ver ${b.name} en el mapa">
@@ -79,6 +80,12 @@ function showOthers(d) {
 
 function showEta(d) {
   if (d.error) { setEta("off", { chip: "Error", label: "No pudimos calcular", num: "Inténtalo de nuevo", textMain: true, sub: d.error }); return; }
+  lastEta = d;
+  // Si se eligió un solo bus, la tarjeta muestra ese bus (no el que llega primero)
+  if (busFilter !== "all" && d.buses) {
+    const sel = d.buses.find((it) => it.bus_id === busFilter);
+    if (sel) d = { ...sel, buses: d.buses };
+  }
   showOthers(d);
   const name = d.name || BUS_NAME;
   if (d.status !== "ok") etaLine.setLatLngs([]);

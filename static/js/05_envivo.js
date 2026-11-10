@@ -46,6 +46,21 @@ function focusOn(id) {
   setFollow(true);
   refreshTruckStatus();
 }
+
+// Selector "Todos · Bus de Luis · Bus de Andrés": oculta los demás buses del mapa, del estado y del tiempo de llegada
+function setBusFilter(id) {
+  busFilter = id === "all" || buses[id] ? id : "all";
+  try { localStorage.setItem("onrouteBusFilter", busFilter); } catch (e) {}
+  if (busFilter !== "all") focusBus = busFilter;
+  const radio = document.querySelector(`#busFilter input[value="${busFilter}"]`);
+  if (radio) radio.checked = true;
+  if (view === "live" && !historyMode) { setLiveBusesVisible(true); fitLive(); }
+  refreshTruckStatus();
+  loadLatest();   // "Última ubicación recibida" del bus elegido
+  if (typeof lastEta !== "undefined" && lastEta) showEta(lastEta);
+}
+document.querySelectorAll("#busFilter input").forEach((r) => r.addEventListener("change", () => setBusFilter(r.value)));
+if ($("busFilter")) { const r = document.querySelector(`#busFilter input[value="${busFilter}"]`); if (r) r.checked = true; }
 setFollow(true);
 map.on("dragstart", () => setFollow(false));
 $("clearTrail").addEventListener("click", () => busList().forEach((b) => b.trail.setLatLngs([])));
@@ -57,6 +72,7 @@ function updateFields(data) {
   $("date").textContent = data.date !== null ? data.date : "--";
   $("time").textContent = data.time !== null ? data.time : "--";
   if (MULTI_BUS && data.bus) $("lastBusName").textContent = `· ${getBus(data.bus).name}`;
+  else if (MULTI_BUS) $("lastBusName").textContent = "";
 }
 
 function updateMap(lat, lon, addToTrail = true, busId = null) {
@@ -64,8 +80,9 @@ function updateMap(lat, lon, addToTrail = true, busId = null) {
   const point = [lat, lon];
   b.marker.setLatLng(point);
   b.hasPos = true;
-  if (view === "live" && !historyMode && !map.hasLayer(b.marker)) b.marker.addTo(map);
+  if (view === "live" && !historyMode && isShown(b) && !map.hasLayer(b.marker)) b.marker.addTo(map);
   if (addToTrail) b.trail.addLatLng(point);
+  if (!isShown(b)) return;   // un bus oculto por el selector no mueve el mapa
   if (!mapCentered) {
     map.setView(point, 15);
     mapCentered = true;
@@ -105,7 +122,8 @@ function loadLatest() {
   return fetch("/api/latest")
     .then((r) => r.json())
     .then((data) => {
-      (data.buses || []).forEach((it) => {
+      const items = data.buses || [];
+      items.forEach((it) => {
         if (it.lat === null) return;
         const b = getBus(it.bus);
         if (!historyMode) updateMap(it.lat, it.lon, false, it.bus);
@@ -114,7 +132,10 @@ function loadLatest() {
           b.lastMsgAt = Math.max(b.lastMsgAt, Date.now() - it.age_s * 1000);
         }
       });
-      if (data.lat !== null && data.lat !== undefined) updateFields(data);
+      // "Última ubicación recibida": la más reciente de los buses que se están viendo
+      const shown = items.filter((it) => isShown(getBus(it.bus)) && it.lat !== null)
+        .sort((a, z) => (z.received_at || "").localeCompare(a.received_at || ""));
+      if (shown.length) updateFields(shown[0]);
       refreshTruckStatus();
     })
     .catch(() => {});
@@ -186,7 +207,7 @@ let sseDown = false; // true si se cayó la conexión con el servidor
 // Lista de estado (un renglón por bus; tocarlo centra el mapa en ese bus) + indicador superior + aviso del mapa
 function refreshTruckStatus() {
   const list = $("busStatusList");
-  list.innerHTML = busList().map((b) => {
+  list.innerHTML = busList().filter(isShown).map((b) => {
     const st = busStatus(b);
     const name = MULTI_BUS ? `<span class="bus-swatch" style="background:${b.color}"></span>${b.name}` : st.title;
     const sub = MULTI_BUS ? `<b>${st.title}</b> · ${st.sub}` : st.sub;
@@ -197,8 +218,9 @@ function refreshTruckStatus() {
   }).join("");
   list.querySelectorAll("[data-bus]").forEach((el) => el.addEventListener("click", () => focusOn(el.dataset.bus)));
 
-  const fresh = busList().some(isFresh);
-  const seen = Math.max(0, ...busList().map((b) => lastSeenAt(b) || 0)) || null;
+  const shownBuses = busList().filter(isShown);
+  const fresh = shownBuses.some(isFresh);
+  const seen = Math.max(0, ...shownBuses.map((b) => lastSeenAt(b) || 0)) || null;
   const ago = seen ? fmtAgo(Date.now() - seen) : null;
   $("agoLine").innerHTML = seen ? `Recibida <b>${ago}</b>` : "Aún no hay datos";
   if (!sseDown) {
@@ -210,7 +232,8 @@ function refreshTruckStatus() {
   const show = !fresh && view === "live";
   $("noDataAlert").classList.toggle("d-none", !show);
   if (show) {
-    $("noDataTitle").textContent = MULTI_BUS ? "Los buses están sin señal" : "El bus está sin señal";
+    $("noDataTitle").textContent = shownBuses.length > 1 ? "Los buses están sin señal"
+      : MULTI_BUS ? `${shownBuses[0].name} está sin señal` : "El bus está sin señal";
     $("noDataText").textContent = seen
       ? `Último dato ${ago}. Te mostramos su última ruta; el mapa se actualiza solo cuando vuelvan.`
       : "Todavía no han enviado ninguna ubicación.";

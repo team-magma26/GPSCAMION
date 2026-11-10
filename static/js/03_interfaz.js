@@ -64,6 +64,7 @@ function setView(v) {
   $("statsCard").classList.toggle("d-none", v !== "live");
   $("placeWrap").classList.toggle("d-none", v !== "place");
   followBtn.classList.toggle("d-none", v !== "live");
+  if ($("busFilter")) $("busFilter").classList.toggle("d-none", v !== "live");
   refreshTruckStatus();
   if (v !== "routes") stopSim();
 

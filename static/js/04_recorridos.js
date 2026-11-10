@@ -243,7 +243,7 @@ function renderRoutesPage() {
     row.dataset.sessionId = s.session_id;
     row.innerHTML = `
       <td><input type="checkbox" class="form-check-input"${route.visible ? " checked" : ""}></td>
-      <td><div><span class="route-swatch" style="background:${route.color}"></span>${MULTI_BUS && s.bus_name ? `<b>${s.bus_name}</b> · ` : ""}${s.start_time} → ${s.end_time}</div><div class="route-meta">${routeMetaText(route, s)}</div></td>
+      <td><div><span class="route-swatch" style="background:${route.color}"></span>${MULTI_BUS && s.bus_name ? `<b>${s.bus_name}</b> · ` : ""}${s.start_time} → ${s.end_time}${s.kind === "incompleta" ? ' <span class="route-tag">incompleta</span>' : ""}</div><div class="route-meta">${routeMetaText(route, s)}</div></td>
       <td>${s.points}</td>`;
     row.querySelector("input").addEventListener("change", (e) => {
       setRouteVisible(s.session_id, e.target.checked);

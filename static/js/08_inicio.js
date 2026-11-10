@@ -27,7 +27,7 @@ source.onmessage = (event) => {
     return;
   }
 
-  updateFields(data);
+  if (isShown(getBus(data.bus))) updateFields(data);
   if (data.lat !== null && data.lon !== null) trackTruck(data.lat, data.lon, data);
   if (data.lat !== null && data.lon !== null && !historyMode) updateMap(data.lat, data.lon, true, data.bus);
   if (data.lat !== null && data.lon !== null) etaOnBusUpdate();

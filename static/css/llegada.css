@@ -164,6 +164,11 @@ aside > *:nth-child(2) { animation-delay: .06s; } aside > *:nth-child(3) { anima
 .bus-status-list .truck-status.selected { outline: 2px solid color-mix(in srgb, var(--s) 70%, transparent); }
 .bus-status-list .ts-title { font-size: 16px; display: flex; align-items: center; gap: 8px; }
 .bus-swatch { display: inline-block; width: 12px; height: 12px; border-radius: 3px; flex-shrink: 0; }
+.bus-swatch.bs-0 { background: #4c8dff; } .bus-swatch.bs-1 { background: #e2322d; }
+.bus-swatch.bs-2 { background: #2ecc71; } .bus-swatch.bs-3 { background: #f4a261; }
+/* Selector "Todos · Bus de Luis · Bus de Andrés" junto a "En vivo" */
+.bus-filter label { display: inline-flex; align-items: center; gap: 6px; }
+.bus-filter .bus-swatch { width: 10px; height: 10px; }
 .last-bus { font-weight: 600; opacity: .75; }
 .eta-others { display: grid; gap: 6px; margin-top: 10px; }
 .eta-others:empty { display: none; }
@@ -177,3 +182,7 @@ aside > *:nth-child(2) { animation-delay: .06s; } aside > *:nth-child(3) { anima
 /* Ruta y bus en la bienvenida */
 .wl-who { font-weight: 700; font-size: 14px; color: #fff; opacity: .92; margin: 4px 0 6px; }
 .brand .route-name { color: #fff; font-weight: 700; }
+
+/* Tabla de recorridos: una vuelta sin terminar (en curso o con datos cortados) */
+.route-tag { display: inline-block; margin-left: 6px; padding: 0 7px; border-radius: 999px; font-size: 11px; font-weight: 600;
+  color: #e5a23b; border: 1px solid color-mix(in srgb, #e5a23b 60%, transparent); }

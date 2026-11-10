@@ -29,19 +29,27 @@ BUSES.forEach((b, i) => {
 const busList = () => BUSES.map((b) => buses[b.id]);
 const getBus = (id) => buses[id] || buses[BUSES[0].id]; // tramas sin "bus" = el primero
 let focusBus = BUSES[0].id; // el bus que sigue "Seguir bus"
+// Qué buses se ven en vivo: "all" (por defecto) o el id de uno. Se recuerda en este navegador.
+let busFilter = "all";
+try { const f = localStorage.getItem("onrouteBusFilter"); if (f && buses[f]) busFilter = f; } catch (e) {}
+if (busFilter !== "all") focusBus = busFilter;
+const isShown = (b) => busFilter === "all" || b.id === busFilter;
 
 // Muestra u oculta los buses del mapa en vivo (en las vistas históricas se ocultan)
 function setLiveBusesVisible(show) {
   busList().forEach((b) => {
-    if (show && b.hasPos) { if (!map.hasLayer(b.marker)) b.marker.addTo(map); }
+    const on = show && isShown(b);
+    if (on && b.hasPos) { if (!map.hasLayer(b.marker)) b.marker.addTo(map); }
     else if (map.hasLayer(b.marker)) map.removeLayer(b.marker);
+    if (on) { if (!map.hasLayer(b.trail)) b.trail.addTo(map); }
+    else if (map.hasLayer(b.trail)) map.removeLayer(b.trail);   // se oculta sin perder la línea
     if (!show) b.trail.setLatLngs([]);
   });
 }
 // Encuadra el mapa para que se vean todos los buses con su recorrido
 function fitLive() {
   const layers = [];
-  busList().forEach((b) => {
+  busList().filter(isShown).forEach((b) => {
     if (b.hasPos) layers.push(b.marker);
     if (b.trail.getLatLngs().length > 1) layers.push(b.trail);
   });

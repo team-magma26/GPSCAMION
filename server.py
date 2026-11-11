@@ -4,6 +4,7 @@ import math
 import os
 import queue
 import re
+import select
 import socket
 import threading
 import time
@@ -1349,20 +1350,33 @@ def udp_listener(port: int = None, port_bus: str = None):
 
 
 def listen_notifications():
-
-    conn = get_connection()
-    conn.set_isolation_level(extensions.ISOLATION_LEVEL_AUTOCOMMIT)
-    cur = conn.cursor()
-    cur.execute(f"LISTEN {NOTIFY_CHANNEL};")
-    print(f"[DB] ({ROLE}) Listening on '{NOTIFY_CHANNEL}' (account: {ACCOUNT_ID})")
+    """Recibe los avisos (NOTIFY) de ubicaciones nuevas y los reparte a las páginas abiertas.
+    select() deja el hilo DORMIDO hasta que llega un aviso (o pasan 30 s): antes se usaba
+    conn.poll() en un ciclo sin espera, que gastaba el 100 % de un núcleo de CPU todo el tiempo
+    y agotó los créditos de CPU de la instancia."""
     while True:
-        conn.poll()
-        while conn.notifies:
-            notify = conn.notifies.pop(0)
-            payload = json.loads(notify.payload)
-
-            if payload.get("account_id", "main") == ACCOUNT_ID:
-                broadcast(payload)
+        try:
+            conn = get_connection()
+            conn.set_isolation_level(extensions.ISOLATION_LEVEL_AUTOCOMMIT)
+            cur = conn.cursor()
+            cur.execute(f"LISTEN {NOTIFY_CHANNEL};")
+            print(f"[DB] ({ROLE}) Listening on '{NOTIFY_CHANNEL}' (account: {ACCOUNT_ID})")
+            while True:
+                if select.select([conn], [], [], 30) == ([], [], []):
+                    continue                      # 30 s sin avisos: sigue esperando
+                conn.poll()
+                while conn.notifies:
+                    notify = conn.notifies.pop(0)
+                    try:
+                        payload = json.loads(notify.payload)
+                    except ValueError:
+                        continue
+                    if payload.get("account_id", "main") == ACCOUNT_ID:
+                        broadcast(payload)
+        except Exception as exc:
+            # Si se cae la conexión con la base de datos, espera y se vuelve a conectar
+            print(f"[DB] ({ROLE}) LISTEN se desconectó ({exc}); reintentando en 5 s")
+            time.sleep(5)
 
 
 app = Flask(__name__)

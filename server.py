@@ -19,6 +19,8 @@ from psycopg2 import extensions
 from dotenv import load_dotenv
 from flask import Flask, Response, jsonify, render_template, request
 
+import vueltas
+
 load_dotenv()
 
 
@@ -71,13 +73,25 @@ def _parse_point(text, default_radius=None):
 
 
 # ---------- Vueltas de la ruta (cómo se separan los recorridos en la tabla) ----------
-# Una vuelta = sale del punto de inicio, pasa por cada punto de paso (extremo este y
-# Puerto Colombia) y regresa al punto de inicio. Medido con los datos reales del 10 de noviembre.
+# La ruta va de oeste (Puerto Colombia) a este (extremo cerca de Uninorte). Una vuelta:
+# sale del punto de inicio, va al extremo este, se devuelve, va al oeste (Puerto Colombia
+# o una vuelta más corta) y regresa al punto de inicio. Medido con los datos del 9 al 13 de nov.
 ROUTE_START = _parse_point(os.environ.get("ROUTE_START", "11.0206,-74.868067,150"), 150)
-ROUTE_WAYPOINTS = [w for w in (_parse_point(x, 300) for x in os.environ.get(
-    "ROUTE_WAYPOINTS", "11.020238,-74.84887,300;10.986705,-74.959867,600").split(";") if x.strip()) if w]
-ROUTE_LOOPS = bool(ROUTE_START and ROUTE_WAYPOINTS) and os.environ.get("ROUTE_LOOPS", "1") != "0"
-LOOPS_DEFAULT_DAYS = 30          # sin filtro de fechas, la tabla busca vueltas de los últimos 30 días
+ROUTE_EAST_LON = float(os.environ.get("ROUTE_EAST_LON", "-74.856"))      # más al este = llegó al extremo este
+ROUTE_WEST_LON = float(os.environ.get("ROUTE_WEST_LON", "-74.900"))      # más al oeste = se fue hacia Puerto Colombia
+ROUTE_PTO_COL_LON = float(os.environ.get("ROUTE_PTO_COL_LON", "-74.945"))  # más al oeste = llegó a Puerto Colombia
+ROUTE_LOOPS = bool(ROUTE_START) and os.environ.get("ROUTE_LOOPS", "1") != "0"
+LOOP_MAX_GAP_MIN = 60            # (método anterior) un hueco más largo corta la vuelta
+LOOPS_DEFAULT_DAYS = 7           # sin filtro de fechas, la tabla busca vueltas de los últimos 7 días
+# Ruta de referencia (una vuelta completa sin huecos). Con ella las vueltas se separan por el avance
+# sobre la ruta y los tramos sin datos se rellenan como estimados (ver vueltas.py).
+ROUTE_REF_FILE = os.environ.get("ROUTE_REF_FILE", os.path.join(os.path.dirname(os.path.abspath(__file__)), "ruta_referencia.json"))
+try:
+    ROUTE_REF = vueltas.Ruta.from_file(ROUTE_REF_FILE)
+except (OSError, ValueError, KeyError) as _exc:
+    ROUTE_REF = None
+    print(f"[VUELTAS] Sin ruta de referencia ({_exc}); se usa el método anterior")
+_loops_cache = {}                # (bus, día, n_puntos, última_hora) -> vueltas de ese día
 LOOP_MIN_POINTS = 30             # un tramo incompleto con menos puntos no se muestra
 
 
@@ -543,51 +557,110 @@ def _bus_points(bus, start_dt, end_dt):
 
 
 def find_loops(rows):
-    """Separa los puntos de un bus en vueltas. Recorre los puntos en orden:
-      - mientras está en el punto de inicio, la salida es el último punto ahí;
-      - al salir, marca cada punto de paso que visita;
-      - si vuelve al inicio habiendo visitado TODOS los puntos de paso, es una vuelta completa
-        (de la salida a la llegada; el tiempo de espera en el inicio no se cuenta).
-    Pasar por el inicio a mitad de vuelta (sin haber llegado a Puerto Colombia) no la corta.
-    Devuelve [(inicio, fin, n_puntos, completa)] con las horas del GPS."""
+    """Separa los puntos de un bus (ordenados por hora) en vueltas.
+
+    Una vuelta TERMINA cuando el bus cruza la longitud del punto de inicio yendo hacia el este
+    después de haber ido al oeste (vuelve de Puerto Colombia o de una vuelta corta). El cruce se
+    mira entre dos puntos seguidos, así que se detecta aunque justo ahí no haya datos (el celular
+    sin señal); en ese caso la hora de llegada se calcula interpolando.
+    La vuelta EMPIEZA en la última lectura en el punto de inicio (no cuenta la espera).
+    Un hueco de más de LOOP_MAX_GAP_MIN minutos (celular apagado) deja lo que iba como incompleto.
+
+    Devuelve [(inicio, fin, n_puntos, tipo, hueco_max_min)], tipo = vuelta | vuelta corta | incompleta."""
     slat, slon, srad = ROUTE_START
     loops = []
-    dep_i = None            # índice de la salida (último punto en el inicio)
-    visited = set()
-    for i, (lat, lon, gps_time, _) in enumerate(rows):
-        at_start = haversine_m(slat, slon, lat, lon) <= srad
-        if at_start:
-            if dep_i is not None and len(visited) == len(ROUTE_WAYPOINTS):
-                loops.append((rows[dep_i][2], gps_time, i - dep_i + 1, True))
-                visited = set()
-            elif dep_i is not None and visited:
-                pass        # pasó por el inicio a mitad de vuelta: sigue la misma vuelta
-            else:
-                visited = set()
-            if not visited:
-                dep_i = i   # sigue esperando en el inicio: la salida se corre a este punto
+    st = {"start": 0, "ok": False, "west": False, "east": False, "pc": False, "gap": 0.0}
+
+    def near_start(k, radius=srad):
+        return haversine_m(slat, slon, rows[k][0], rows[k][1]) <= radius
+
+    def reset(i, ok):
+        st.update(start=i, ok=ok, west=False, east=False, pc=False, gap=0.0)
+
+    def close(i_end, complete, end_time=None):
+        i0 = st["start"]
+        if st["ok"]:                      # salida = última lectura en el inicio antes de alejarse
+            for k in range(st["start"], i_end):
+                if near_start(k):
+                    i0 = k
+                elif not near_start(k, 1000):
+                    break
+        n = i_end - i0 + 1
+        if complete and n >= 10:
+            loops.append((rows[i0][2], end_time or rows[i_end][2], n,
+                          "vuelta" if st["pc"] else "vuelta corta", round(st["gap"])))
+        elif not complete and n >= LOOP_MIN_POINTS:
+            loops.append((rows[i0][2], rows[i_end][2], n, "incompleta", round(st["gap"])))
+
+    if not rows:
+        return loops
+    reset(0, near_start(0, 300))
+    for i in range(1, len(rows)):
+        la0, lo0, g0 = rows[i - 1][0], rows[i - 1][1], parse_dt(rows[i - 1][2])
+        la1, lo1, g1 = rows[i][0], rows[i][1], parse_dt(rows[i][2])
+        gap = (g1 - g0).total_seconds() / 60 if g0 and g1 else 0
+        if gap > LOOP_MAX_GAP_MIN:
+            if st["east"] or st["west"]:
+                close(i - 1, False)
+            reset(i, near_start(i, 300))
             continue
-        if dep_i is None:
-            continue        # todavía no ha pasado por el inicio
-        for k, (wlat, wlon, wrad) in enumerate(ROUTE_WAYPOINTS):
-            if haversine_m(wlat, wlon, lat, lon) <= wrad:
-                visited.add(k)
-    # Vuelta sin terminar (en curso, o se cortaron los datos)
-    if dep_i is not None and len(rows) - dep_i >= LOOP_MIN_POINTS and visited:
-        loops.append((rows[dep_i][2], rows[-1][2], len(rows) - dep_i, False))
+        st["gap"] = max(st["gap"], gap)
+        st["east"] |= lo1 > ROUTE_EAST_LON
+        st["west"] |= lo1 < ROUTE_WEST_LON
+        st["pc"] |= lo1 < ROUTE_PTO_COL_LON
+        crossed = lo0 < slon <= lo1 and abs((la0 + la1) / 2 - slat) < 0.02
+        if crossed and st["west"]:
+            end_time = None
+            if gap > 3 and g0 and g1:     # cruzó durante un hueco: hora estimada de llegada
+                frac = (slon - lo0) / (lo1 - lo0)
+                end_time = (g0 + (g1 - g0) * frac).strftime("%Y-%m-%d %H:%M:%S")
+            close(i, st["ok"] and st["east"], end_time)
+            reset(i, True)
+    if st["east"] or st["west"]:
+        close(len(rows) - 1, False)
     return loops
 
 
+def _day_loops(bus, day, rows):
+    """Vueltas de un bus en un día (con caché: un día pasado no cambia)."""
+    key = (bus, day, len(rows), str(rows[-1][2]) if rows else "")
+    if key not in _loops_cache:
+        if len(_loops_cache) > 400:
+            _loops_cache.clear()
+        _loops_cache[key] = vueltas.day_loops([(r[0], r[1], r[2]) for r in rows], ROUTE_REF)
+    return _loops_cache[key]
+
+
+def _bus_day_rows(bus, day):
+    return _bus_points(bus, f"{day} 00:00:00", f"{day} 23:59:59")
+
+
 def get_loops(start_dt=None, end_dt=None, limit=50):
-    """Vueltas de todos los buses en un rango (por defecto, los últimos 30 días)."""
+    """Vueltas de todos los buses en un rango (por defecto, los últimos LOOPS_DEFAULT_DAYS días)."""
     end_dt = end_dt or now_local().strftime("%Y-%m-%d %H:%M:%S")
     start_dt = start_dt or (now_local() - timedelta(days=LOOPS_DEFAULT_DAYS)).strftime("%Y-%m-%d %H:%M:%S")
     out = []
     for bus in BUSES:
-        for t0, t1, n, complete in find_loops(_bus_points(bus, start_dt, end_dt)):
+        if ROUTE_REF:
+            rows = _bus_points(bus, start_dt[:10] + " 00:00:00", end_dt[:10] + " 23:59:59")
+            by_day = {}
+            for r in rows:
+                by_day.setdefault(str(r[2])[:10], []).append(r)
+            for day, day_rows in by_day.items():
+                for lp in _day_loops(bus, day, day_rows):
+                    if lp["end"] < start_dt or lp["start"] > end_dt:
+                        continue
+                    t0, t1 = lp["start"], lp["end"]
+                    out.append({"session_id": f"v|{bus}|{t0}|{t1}", "start_time": t0, "end_time": t1,
+                                "points": len(lp["points"]), "bus": bus, "bus_name": bus_name(bus),
+                                "kind": lp["kind"], "observed_km": lp["observed_km"], "est_km": lp["est_km"],
+                                "max_gap_min": max([round((parse_dt(g[1]) - parse_dt(g[0])).total_seconds() / 60)
+                                                    for g in lp["gaps"]] or [0])})
+            continue
+        for t0, t1, n, kind, gap in find_loops(_bus_points(bus, start_dt, end_dt)):
             out.append({"session_id": f"v|{bus}|{t0}|{t1}", "start_time": t0, "end_time": t1,
                         "points": n, "bus": bus, "bus_name": bus_name(bus),
-                        "kind": "vuelta" if complete else "incompleta"})
+                        "kind": kind, "max_gap_min": gap})
     out.sort(key=lambda x: x["start_time"], reverse=True)
     return out[:limit]
 
@@ -601,7 +674,13 @@ def get_session_route(session_id: str, max_points: int = MAX_HISTORY_RANGE_POINT
             _, bus, t0, t1 = session_id.split("|")
         except ValueError:
             return []
-        return _bus_points(clean_bus(bus), t0, t1)[:max_points]
+        bus = clean_bus(bus)
+        if ROUTE_REF:
+            for lp in _day_loops(bus, t0[:10], _bus_day_rows(bus, t0[:10])):
+                if lp["start"] == t0:
+                    # (lat, lon, hora, recibido, estimado): los estimados no vienen de la base de datos
+                    return [(la, lo, t, None if est else t, est) for la, lo, t, est in lp["points"]][:max_points]
+        return _bus_points(bus, t0, t1)[:max_points]
     with db_lock:
         conn = get_connection()
         cur = conn.cursor()
@@ -1512,11 +1591,14 @@ def api_session_route():
         return jsonify({"error": "Se requiere el parámetro 'session_id'"}), 400
 
     rows = get_session_route(session_id)
-    points = [
-        {"lat": lat, "lon": lon, "time": gps_time, "received_at": received_at}
-        for lat, lon, gps_time, received_at in rows
-    ]
-    return jsonify({"points": points, "count": len(points)})
+    points = []
+    for lat, lon, gps_time, received_at, *rest in rows:
+        p = {"lat": lat, "lon": lon, "time": gps_time, "received_at": received_at}
+        if rest and rest[0]:
+            p["est"] = True               # tramo sin datos reconstruido con la ruta de referencia
+        points.append(p)
+    return jsonify({"points": points, "count": len(points),
+                    "estimated": sum(1 for p in points if p.get("est"))})
 
 
 @app.route("/api/passages")

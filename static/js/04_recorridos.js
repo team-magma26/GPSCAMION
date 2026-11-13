@@ -10,10 +10,25 @@ function endpointIcon(letter, color) {
 }
 
 function drawRoute(route) {
-  const latlngs = route.points.map((p) => [p.lat, p.lon]);
-  route.polyline = L.polyline(catmullRomSpline(latlngs, 8), {
-    color: route.color, weight: 4, opacity: 0.9, smoothFactor: 1.5,
-  }).addTo(routesLayer);
+  // Tramos con datos reales: línea continua. Tramos estimados (p.est: el celular no mandó datos y el
+  // servidor los reconstruyó con la ruta de referencia): línea punteada.
+  const pts = route.points;
+  route.polyline = L.featureGroup().addTo(routesLayer);
+  let run = [], est = null;
+  const flush = () => {
+    if (run.length < 2) return;
+    const line = est
+      ? L.polyline(run, { color: route.color, weight: 4, opacity: 0.8, dashArray: "2 9", lineCap: "round" })
+          .bindTooltip("Tramo estimado: aquí el celular no mandó datos", { sticky: true })
+      : L.polyline(catmullRomSpline(run, 8), { color: route.color, weight: 4, opacity: 0.9, smoothFactor: 1.5 });
+    line.addTo(route.polyline);
+  };
+  for (let i = 1; i < pts.length; i++) {
+    const e = !!(pts[i].est || pts[i - 1].est);
+    if (e !== est) { flush(); run = [[pts[i - 1].lat, pts[i - 1].lon]]; est = e; }
+    run.push([pts[i].lat, pts[i].lon]);
+  }
+  flush();
 
   if (route.points.length > 0) {
     const first = route.points[0];
@@ -63,6 +78,21 @@ function loadRoutePoints(sessionId) {
       updateRouteStats(sessionId);
     })
     .catch(() => { route.loading = false; route.failed = true; updateRouteStats(sessionId); });
+}
+
+// Etiquetas de la tabla: tipo de vuelta y cuánto se estimó
+function routeTags(s) {
+  const k = s.kind || "";
+  let t = "";
+  if (k === "incompleta") t += ' <span class="route-tag">incompleta</span>';
+  else if (k.startsWith("vuelta corta")) t += ' <span class="route-tag corta">vuelta corta</span>';
+  if (k.endsWith("estimada")) t += ' <span class="route-tag gap" title="Más de la mitad de esta vuelta se reconstruyó con la ruta de referencia">mayormente estimada</span>';
+  if (s.est_km >= 0.5) {
+    t += ` <span class="route-tag gap" title="Tramos sin datos (máx. ${s.max_gap_min} min seguidos) reconstruidos con la ruta de referencia; en el mapa salen punteados">${s.est_km} km estimados</span>`;
+  } else if (s.est_km === undefined && s.max_gap_min >= 10) {
+    t += ` <span class="route-tag gap">sin datos ${s.max_gap_min} min</span>`;
+  }
+  return t;
 }
 
 function routeMetaText(route, s) {
@@ -243,7 +273,7 @@ function renderRoutesPage() {
     row.dataset.sessionId = s.session_id;
     row.innerHTML = `
       <td><input type="checkbox" class="form-check-input"${route.visible ? " checked" : ""}></td>
-      <td><div><span class="route-swatch" style="background:${route.color}"></span>${MULTI_BUS && s.bus_name ? `<b>${s.bus_name}</b> · ` : ""}${s.start_time} → ${s.end_time}${s.kind === "incompleta" ? ' <span class="route-tag">incompleta</span>' : ""}</div><div class="route-meta">${routeMetaText(route, s)}</div></td>
+      <td><div><span class="route-swatch" style="background:${route.color}"></span>${MULTI_BUS && s.bus_name ? `<b>${s.bus_name}</b> · ` : ""}${s.start_time} → ${s.end_time}${routeTags(s)}</div><div class="route-meta">${routeMetaText(route, s)}</div></td>
       <td>${s.points}</td>`;
     row.querySelector("input").addEventListener("change", (e) => {
       setRouteVisible(s.session_id, e.target.checked);

@@ -19,6 +19,8 @@ from psycopg2 import extensions
 from dotenv import load_dotenv
 from flask import Flask, Response, jsonify, render_template, request
 
+import vueltas
+
 load_dotenv()
 
 
@@ -71,13 +73,25 @@ def _parse_point(text, default_radius=None):
 
 
 # ---------- Vueltas de la ruta (cómo se separan los recorridos en la tabla) ----------
-# Una vuelta = sale del punto de inicio, pasa por cada punto de paso (extremo este y
-# Puerto Colombia) y regresa al punto de inicio. Medido con los datos reales del 10 de noviembre.
+# La ruta va de oeste (Puerto Colombia) a este (extremo cerca de Uninorte). Una vuelta:
+# sale del punto de inicio, va al extremo este, se devuelve, va al oeste (Puerto Colombia
+# o una vuelta más corta) y regresa al punto de inicio. Medido con los datos del 9 al 13 de nov.
 ROUTE_START = _parse_point(os.environ.get("ROUTE_START", "11.0206,-74.868067,150"), 150)
-ROUTE_WAYPOINTS = [w for w in (_parse_point(x, 300) for x in os.environ.get(
-    "ROUTE_WAYPOINTS", "11.020238,-74.84887,300;10.986705,-74.959867,600").split(";") if x.strip()) if w]
-ROUTE_LOOPS = bool(ROUTE_START and ROUTE_WAYPOINTS) and os.environ.get("ROUTE_LOOPS", "1") != "0"
-LOOPS_DEFAULT_DAYS = 30          # sin filtro de fechas, la tabla busca vueltas de los últimos 30 días
+ROUTE_EAST_LON = float(os.environ.get("ROUTE_EAST_LON", "-74.856"))      # más al este = llegó al extremo este
+ROUTE_WEST_LON = float(os.environ.get("ROUTE_WEST_LON", "-74.900"))      # más al oeste = se fue hacia Puerto Colombia
+ROUTE_PTO_COL_LON = float(os.environ.get("ROUTE_PTO_COL_LON", "-74.945"))  # más al oeste = llegó a Puerto Colombia
+ROUTE_LOOPS = bool(ROUTE_START) and os.environ.get("ROUTE_LOOPS", "1") != "0"
+LOOP_MAX_GAP_MIN = 60            # (método anterior) un hueco más largo corta la vuelta
+LOOPS_DEFAULT_DAYS = 7           # sin filtro de fechas, la tabla busca vueltas de los últimos 7 días
+# Ruta de referencia (una vuelta completa sin huecos). Con ella las vueltas se separan por el avance
+# sobre la ruta y los tramos sin datos se rellenan como estimados (ver vueltas.py).
+ROUTE_REF_FILE = os.environ.get("ROUTE_REF_FILE", os.path.join(os.path.dirname(os.path.abspath(__file__)), "ruta_referencia.json"))
+try:
+    ROUTE_REF = vueltas.Ruta.from_file(ROUTE_REF_FILE)
+except (OSError, ValueError, KeyError) as _exc:
+    ROUTE_REF = None
+    print(f"[VUELTAS] Sin ruta de referencia ({_exc}); se usa el método anterior")
+_loops_cache = {}                # (bus, día, n_puntos, última_hora) -> vueltas de ese día
 LOOP_MIN_POINTS = 30             # un tramo incompleto con menos puntos no se muestra
 
 
@@ -144,26 +158,30 @@ _eta_cache_lock = threading.Lock()
 #   ml       -> modelo propio; si no se puede, el estimado (sin TomTom)
 #   tomtom   -> como antes: TomTom y, si falla, el estimado
 #   estimado -> solo la fórmula (distancia / velocidad)
-# El modelo y la ruta los generan ml/exportar_dataset.py y ml/entrenar.py.
-# Si no existen (o falta scikit-learn), el servidor funciona igual que antes.
+# El modelo lo generan ml/exportar_dataset.py y ml/entrenar.py (red neuronal guardada en
+# ml/modelo_eta_mlp.json; se evalúa con numpy). La posición del bus y del usuario sobre la ruta
+# sale de ruta_referencia.json (vueltas.py). Si falta algo, el servidor funciona igual que antes.
 ETA_METHOD = os.environ.get("ETA_METHOD", "auto").strip().lower()
 _BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-ML_MODEL_PATH = os.environ.get("ML_MODEL_PATH", os.path.join(_BASE_DIR, "ml", "modelo_eta.joblib"))
-ML_ROUTE_PATH = os.environ.get("ML_ROUTE_PATH", os.path.join(_BASE_DIR, "ml", "ruta_referencia.json"))
-ML_MAX_OFF_ROUTE_M = 300     # si el bus está a más de esto de la ruta conocida, no se usa el modelo
+_ML_DEFAULT = os.path.join(_BASE_DIR, "ml", "modelo_eta_mlp.json")
+if not os.path.exists(_ML_DEFAULT):
+    _ML_DEFAULT = os.path.join(_BASE_DIR, "ml", "modelo_eta.joblib")
+ML_MODEL_PATH = os.environ.get("ML_MODEL_PATH", _ML_DEFAULT)
+ML_MAX_OFF_ROUTE_M = 200     # si el usuario está a más de esto de la ruta, no se usa el modelo
+ML_HISTORY_MIN = 10          # minutos de lecturas recientes para ubicar al bus en la ruta
 _ML_MODEL = None
-_ML_ROUTE = None
-if ETA_METHOD in ("auto", "ml") and os.path.exists(ML_MODEL_PATH) and os.path.exists(ML_ROUTE_PATH):
+if ETA_METHOD in ("auto", "ml") and os.path.exists(ML_MODEL_PATH):
     try:
-        from ml.eta_ml import RefRoute, build_features as ml_build_features, load_model, predict_seconds
+        from ml.eta_ml import build_features as ml_build_features, load_model, predict_seconds
+        from ml.eta_ml import tiempo_ref as ml_tiempo_ref, velocidad_kmh as ml_velocidad
         _ML_MODEL = load_model(ML_MODEL_PATH)
-        _ML_ROUTE = RefRoute.load(ML_ROUTE_PATH) if _ML_MODEL else None
         if _ML_MODEL:
             print(f"[ML] Modelo de llegada cargado: {_ML_MODEL.get('nombre')} "
-                  f"({_ML_MODEL.get('recorridos')} recorridos, entrenado {_ML_MODEL.get('entrenado')})")
+                  f"({_ML_MODEL.get('vueltas', _ML_MODEL.get('recorridos'))} vueltas, "
+                  f"entrenado {_ML_MODEL.get('entrenado')})")
     except Exception as exc:
         print(f"[ML] No se pudo cargar el modelo, se sigue sin ML: {exc}")
-        _ML_MODEL = _ML_ROUTE = None
+        _ML_MODEL = None
 
 # ---------- Semana 3: métricas de uso (página oculta /metricas) ----------
 # Si METRICS_KEY tiene valor, /metricas solo abre con ?key=<valor>; si no, cualquiera con el enlace.
@@ -543,51 +561,110 @@ def _bus_points(bus, start_dt, end_dt):
 
 
 def find_loops(rows):
-    """Separa los puntos de un bus en vueltas. Recorre los puntos en orden:
-      - mientras está en el punto de inicio, la salida es el último punto ahí;
-      - al salir, marca cada punto de paso que visita;
-      - si vuelve al inicio habiendo visitado TODOS los puntos de paso, es una vuelta completa
-        (de la salida a la llegada; el tiempo de espera en el inicio no se cuenta).
-    Pasar por el inicio a mitad de vuelta (sin haber llegado a Puerto Colombia) no la corta.
-    Devuelve [(inicio, fin, n_puntos, completa)] con las horas del GPS."""
+    """Separa los puntos de un bus (ordenados por hora) en vueltas.
+
+    Una vuelta TERMINA cuando el bus cruza la longitud del punto de inicio yendo hacia el este
+    después de haber ido al oeste (vuelve de Puerto Colombia o de una vuelta corta). El cruce se
+    mira entre dos puntos seguidos, así que se detecta aunque justo ahí no haya datos (el celular
+    sin señal); en ese caso la hora de llegada se calcula interpolando.
+    La vuelta EMPIEZA en la última lectura en el punto de inicio (no cuenta la espera).
+    Un hueco de más de LOOP_MAX_GAP_MIN minutos (celular apagado) deja lo que iba como incompleto.
+
+    Devuelve [(inicio, fin, n_puntos, tipo, hueco_max_min)], tipo = vuelta | vuelta corta | incompleta."""
     slat, slon, srad = ROUTE_START
     loops = []
-    dep_i = None            # índice de la salida (último punto en el inicio)
-    visited = set()
-    for i, (lat, lon, gps_time, _) in enumerate(rows):
-        at_start = haversine_m(slat, slon, lat, lon) <= srad
-        if at_start:
-            if dep_i is not None and len(visited) == len(ROUTE_WAYPOINTS):
-                loops.append((rows[dep_i][2], gps_time, i - dep_i + 1, True))
-                visited = set()
-            elif dep_i is not None and visited:
-                pass        # pasó por el inicio a mitad de vuelta: sigue la misma vuelta
-            else:
-                visited = set()
-            if not visited:
-                dep_i = i   # sigue esperando en el inicio: la salida se corre a este punto
+    st = {"start": 0, "ok": False, "west": False, "east": False, "pc": False, "gap": 0.0}
+
+    def near_start(k, radius=srad):
+        return haversine_m(slat, slon, rows[k][0], rows[k][1]) <= radius
+
+    def reset(i, ok):
+        st.update(start=i, ok=ok, west=False, east=False, pc=False, gap=0.0)
+
+    def close(i_end, complete, end_time=None):
+        i0 = st["start"]
+        if st["ok"]:                      # salida = última lectura en el inicio antes de alejarse
+            for k in range(st["start"], i_end):
+                if near_start(k):
+                    i0 = k
+                elif not near_start(k, 1000):
+                    break
+        n = i_end - i0 + 1
+        if complete and n >= 10:
+            loops.append((rows[i0][2], end_time or rows[i_end][2], n,
+                          "vuelta" if st["pc"] else "vuelta corta", round(st["gap"])))
+        elif not complete and n >= LOOP_MIN_POINTS:
+            loops.append((rows[i0][2], rows[i_end][2], n, "incompleta", round(st["gap"])))
+
+    if not rows:
+        return loops
+    reset(0, near_start(0, 300))
+    for i in range(1, len(rows)):
+        la0, lo0, g0 = rows[i - 1][0], rows[i - 1][1], parse_dt(rows[i - 1][2])
+        la1, lo1, g1 = rows[i][0], rows[i][1], parse_dt(rows[i][2])
+        gap = (g1 - g0).total_seconds() / 60 if g0 and g1 else 0
+        if gap > LOOP_MAX_GAP_MIN:
+            if st["east"] or st["west"]:
+                close(i - 1, False)
+            reset(i, near_start(i, 300))
             continue
-        if dep_i is None:
-            continue        # todavía no ha pasado por el inicio
-        for k, (wlat, wlon, wrad) in enumerate(ROUTE_WAYPOINTS):
-            if haversine_m(wlat, wlon, lat, lon) <= wrad:
-                visited.add(k)
-    # Vuelta sin terminar (en curso, o se cortaron los datos)
-    if dep_i is not None and len(rows) - dep_i >= LOOP_MIN_POINTS and visited:
-        loops.append((rows[dep_i][2], rows[-1][2], len(rows) - dep_i, False))
+        st["gap"] = max(st["gap"], gap)
+        st["east"] |= lo1 > ROUTE_EAST_LON
+        st["west"] |= lo1 < ROUTE_WEST_LON
+        st["pc"] |= lo1 < ROUTE_PTO_COL_LON
+        crossed = lo0 < slon <= lo1 and abs((la0 + la1) / 2 - slat) < 0.02
+        if crossed and st["west"]:
+            end_time = None
+            if gap > 3 and g0 and g1:     # cruzó durante un hueco: hora estimada de llegada
+                frac = (slon - lo0) / (lo1 - lo0)
+                end_time = (g0 + (g1 - g0) * frac).strftime("%Y-%m-%d %H:%M:%S")
+            close(i, st["ok"] and st["east"], end_time)
+            reset(i, True)
+    if st["east"] or st["west"]:
+        close(len(rows) - 1, False)
     return loops
 
 
+def _day_loops(bus, day, rows):
+    """Vueltas de un bus en un día (con caché: un día pasado no cambia)."""
+    key = (bus, day, len(rows), str(rows[-1][2]) if rows else "")
+    if key not in _loops_cache:
+        if len(_loops_cache) > 400:
+            _loops_cache.clear()
+        _loops_cache[key] = vueltas.day_loops([(r[0], r[1], r[2]) for r in rows], ROUTE_REF)
+    return _loops_cache[key]
+
+
+def _bus_day_rows(bus, day):
+    return _bus_points(bus, f"{day} 00:00:00", f"{day} 23:59:59")
+
+
 def get_loops(start_dt=None, end_dt=None, limit=50):
-    """Vueltas de todos los buses en un rango (por defecto, los últimos 30 días)."""
+    """Vueltas de todos los buses en un rango (por defecto, los últimos LOOPS_DEFAULT_DAYS días)."""
     end_dt = end_dt or now_local().strftime("%Y-%m-%d %H:%M:%S")
     start_dt = start_dt or (now_local() - timedelta(days=LOOPS_DEFAULT_DAYS)).strftime("%Y-%m-%d %H:%M:%S")
     out = []
     for bus in BUSES:
-        for t0, t1, n, complete in find_loops(_bus_points(bus, start_dt, end_dt)):
+        if ROUTE_REF:
+            rows = _bus_points(bus, start_dt[:10] + " 00:00:00", end_dt[:10] + " 23:59:59")
+            by_day = {}
+            for r in rows:
+                by_day.setdefault(str(r[2])[:10], []).append(r)
+            for day, day_rows in by_day.items():
+                for lp in _day_loops(bus, day, day_rows):
+                    if lp["end"] < start_dt or lp["start"] > end_dt:
+                        continue
+                    t0, t1 = lp["start"], lp["end"]
+                    out.append({"session_id": f"v|{bus}|{t0}|{t1}", "start_time": t0, "end_time": t1,
+                                "points": len(lp["points"]), "bus": bus, "bus_name": bus_name(bus),
+                                "kind": lp["kind"], "observed_km": lp["observed_km"], "est_km": lp["est_km"],
+                                "max_gap_min": max([round((parse_dt(g[1]) - parse_dt(g[0])).total_seconds() / 60)
+                                                    for g in lp["gaps"]] or [0])})
+            continue
+        for t0, t1, n, kind, gap in find_loops(_bus_points(bus, start_dt, end_dt)):
             out.append({"session_id": f"v|{bus}|{t0}|{t1}", "start_time": t0, "end_time": t1,
                         "points": n, "bus": bus, "bus_name": bus_name(bus),
-                        "kind": "vuelta" if complete else "incompleta"})
+                        "kind": kind, "max_gap_min": gap})
     out.sort(key=lambda x: x["start_time"], reverse=True)
     return out[:limit]
 
@@ -601,7 +678,13 @@ def get_session_route(session_id: str, max_points: int = MAX_HISTORY_RANGE_POINT
             _, bus, t0, t1 = session_id.split("|")
         except ValueError:
             return []
-        return _bus_points(clean_bus(bus), t0, t1)[:max_points]
+        bus = clean_bus(bus)
+        if ROUTE_REF:
+            for lp in _day_loops(bus, t0[:10], _bus_day_rows(bus, t0[:10])):
+                if lp["start"] == t0:
+                    # (lat, lon, hora, recibido, estimado): los estimados no vienen de la base de datos
+                    return [(la, lo, t, None if est else t, est) for la, lo, t, est in lp["points"]][:max_points]
+        return _bus_points(bus, t0, t1)[:max_points]
     with db_lock:
         conn = get_connection()
         cur = conn.cursor()
@@ -883,44 +966,63 @@ def compute_eta(blat, blon, ulat, ulon, speed_kmh, bus: str = None):
     return result
 
 
-def ml_eta(rows, blat, blon, ulat, ulon, speed_kmh):
-    """Tiempo de llegada con el modelo propio (entrenado con recorridos reales).
-    El destino es el punto de la ruta de referencia más cercano al usuario.
-    Devuelve None si no se puede usar (sin modelo, bus fuera de la ruta o yendo
-    en sentido contrario al usuario); entonces se usa TomTom o el estimado."""
-    if not (_ML_MODEL and _ML_ROUTE):
-        return None
-    b_cum, b_i, b_off = _ML_ROUTE.project(blat, blon)
-    u_cum, u_i, _ = _ML_ROUTE.project(ulat, ulon)
-    if b_off > ML_MAX_OFF_ROUTE_M:
-        return None
-    sentido = 1 if u_cum >= b_cum else 0
+def ml_eta(bus, blat, blon, ulat, ulon):
+    """Tiempo de llegada con el modelo propio (red neuronal entrenada con vueltas reales).
 
-    # ¿Hacia dónde va el bus sobre la ruta? (posición de hace 25-120 s)
-    t_new = parse_dt(rows[0][2])
-    for la, lo, g, _ in rows[1:]:
-        t_old = parse_dt(g)
-        if t_new and t_old and 25 <= (t_new - t_old).total_seconds() <= 120:
-            avance = b_cum - _ML_ROUTE.project(la, lo)[0]
-            if abs(avance) > 20 and (avance > 0) != (sentido == 1):
-                return None   # el bus va en sentido contrario: tiene que dar la vuelta
-            break
+    1. Ubica al bus en la ruta con sus lecturas de los últimos minutos (vueltas.avance).
+    2. Ubica al usuario: la siguiente pasada del bus por el punto de la ruta más cercano a él.
+       Como la ruta es una vuelta cerrada, el bus siempre llega; no importa hacia dónde vaya ahora.
+    3. Arma las variables igual que en el entrenamiento y le pide el tiempo al modelo.
+    Devuelve None si no se puede usar (sin modelo, usuario lejos de la ruta, bus fuera de la ruta
+    o esperando en el punto de inicio); entonces se usa TomTom o el estimado."""
+    R = ROUTE_REF
+    if not (_ML_MODEL and R):
+        return None
+    rows = list(reversed(get_recent_locations(limit=ML_HISTORY_MIN * 6 + 10, bus=bus)))
+    if not rows:
+        return None
+    t_last = parse_dt(rows[-1][2])
+    rows = [r for r in rows if t_last and parse_dt(r[2]) and
+            (t_last - parse_dt(r[2])).total_seconds() <= ML_HISTORY_MIN * 60]
+    on, P, _links = vueltas.avance([(r[0], r[1], r[2]) for r in rows], R)
+    if not on or on[-1] != len(rows) - 1:
+        return None                       # la última lectura del bus no está sobre la ruta
+    prog = [P[i] for i in on]
+    times = [parse_dt(rows[i][2]) for i in on]
+    p_bus = prog[-1]
+    s_bus = p_bus % R.L
+    v1 = ml_velocidad(prog, times, len(prog) - 1, 60)
+    v5 = ml_velocidad(prog, times, len(prog) - 1, 300)
+    if (s_bus < 300 or s_bus > R.L - 300) and v1 < 3:
+        return None                       # esperando en el inicio: no se sabe cuándo sale
 
-    dist_ruta = abs(u_cum - b_cum)
-    dest_lat, dest_lon = _ML_ROUTE.pts[u_i]
+    cands = [(k, d) for k, d in R.cands(ulat, ulon) if d <= ML_MAX_OFF_ROUTE_M]
+    if not cands:
+        return None
+    k, _ = min(cands, key=lambda c: (R.p[c[0]][2] - s_bus) % R.L)   # la próxima pasada
+    dist_ruta = (R.p[k][2] - s_bus) % R.L
+    if dist_ruta < 50:
+        return None
+    dest_lat, dest_lon = R.p[k][0], R.p[k][1]
     feats = ml_build_features(
         dist_ruta_m=dist_ruta,
         dist_recta_m=haversine_m(blat, blon, dest_lat, dest_lon),
-        avance_m=b_cum, sentido=sentido, vel_actual_kmh=speed_kmh or 0.0,
-        dt=t_new or now_local(),
+        tiempo_ref_s=ml_tiempo_ref(R, p_bus, p_bus + dist_ruta),
+        avance_m=s_bus, destino_m=R.p[k][2],
+        vel_actual_kmh=v1, vel_5min_kmh=v5, dt=times[-1] or now_local(),
     )
     try:
         seconds = predict_seconds(_ML_MODEL, feats)
     except Exception as exc:
         print(f"[ML] Falló la predicción, se usa TomTom/estimado: {exc}")
         return None
-    path = _ML_ROUTE.between(b_i, u_i)
-    path = [(blat, blon)] + list(path[1:]) if path else [(blat, blon), (ulat, ulon)]
+    path = [(blat, blon)]
+    s = 100.0
+    while s < dist_ruta:
+        la, lo, _ = R.at(s_bus + s)
+        path.append((la, lo))
+        s += 100.0
+    path.append((dest_lat, dest_lon))
     return seconds, dist_ruta, 0, path, "modelo"
 
 
@@ -1512,11 +1614,14 @@ def api_session_route():
         return jsonify({"error": "Se requiere el parámetro 'session_id'"}), 400
 
     rows = get_session_route(session_id)
-    points = [
-        {"lat": lat, "lon": lon, "time": gps_time, "received_at": received_at}
-        for lat, lon, gps_time, received_at in rows
-    ]
-    return jsonify({"points": points, "count": len(points)})
+    points = []
+    for lat, lon, gps_time, received_at, *rest in rows:
+        p = {"lat": lat, "lon": lon, "time": gps_time, "received_at": received_at}
+        if rest and rest[0]:
+            p["est"] = True               # tramo sin datos reconstruido con la ruta de referencia
+        points.append(p)
+    return jsonify({"points": points, "count": len(points),
+                    "estimated": sum(1 for p in points if p.get("est"))})
 
 
 @app.route("/api/passages")
@@ -1642,7 +1747,7 @@ def eta_for_bus(bid, ulat, ulon):
         return {**base, "status": "here", "straight_m": round(straight), "trend": trend}
 
     # Método de cálculo según ETA_METHOD: modelo propio -> TomTom -> estimado
-    result = ml_eta(rows, blat, blon, ulat, ulon, speed) if ETA_METHOD in ("auto", "ml") else None
+    result = ml_eta(bid, blat, blon, ulat, ulon) if ETA_METHOD in ("auto", "ml") else None
     if result is None and ETA_METHOD in ("ml", "estimado"):
         result = (*estimate_eta(blat, blon, ulat, ulon, speed), "estimado")
     if result is None:

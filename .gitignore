@@ -219,3 +219,4 @@ __marimo__/
 
 # Dataset del modelo de llegada (se regenera con ml/exportar_dataset.py)
 ml/dataset_eta.csv
+ml/predicciones_validacion.csv

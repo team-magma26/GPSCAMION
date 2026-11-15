@@ -6,11 +6,15 @@ Las usan los tres lados para que las variables se calculen SIEMPRE igual:
   - ml/entrenar.py          -> entrena y guarda el modelo
   - server.py (/api/eta)    -> predice en vivo
 
-Idea: la ruta del bus se representa con una "ruta de referencia" (un recorrido
-real de la línea, guardado como lista de puntos con su distancia acumulada).
-Cualquier posición se "proyecta" sobre esa ruta: así se sabe cuántos metros
-lleva el bus desde el inicio de la línea y cuántos le faltan hasta el punto
-de la ruta más cercano al usuario.
+Idea: la posición del bus se expresa como "avance": cuántos metros lleva desde el punto de
+inicio de la vuelta, sobre la ruta de referencia de 46 km (ruta_referencia.json, ver vueltas.py).
+La ruta pasa dos veces por varias calles (de ida y de vuelta); por eso el avance no se saca con
+"el punto más cercano" sino con vueltas.match(), que mira la secuencia de lecturas. Como la ruta es
+una vuelta cerrada, el bus siempre llega al usuario: la distancia por la ruta es el avance que
+le falta hasta la siguiente pasada por el punto del usuario.
+
+La red neuronal (MLP) se entrena en el PC con scikit-learn y se guarda como JSON (pesos y
+escalado). El servidor la evalúa con numpy, así no necesita scikit-learn ni la misma versión.
 """
 import json
 import math
@@ -20,15 +24,18 @@ from datetime import datetime
 FEATURES = [
     "dist_ruta_m",      # metros por la ruta entre el bus y el destino
     "dist_recta_m",     # metros en línea recta entre el bus y el destino
-    "avance_m",         # metros que lleva el bus desde el inicio de la ruta de referencia
-    "sentido",          # 1 = hacia el final de la ruta de referencia, 0 = hacia el inicio
-    "vel_actual_kmh",   # velocidad del bus en el último minuto
+    "tiempo_ref_s",     # segundos que tardó la vuelta de referencia en ese mismo tramo
+    "avance_m",         # dónde va el bus: metros desde el inicio de la vuelta (0 a 46 200)
+    "destino_m",        # dónde está el destino: metros desde el inicio de la vuelta
+    "vel_actual_kmh",   # velocidad del bus en el último minuto (por la ruta)
+    "vel_5min_kmh",     # velocidad media del bus en los últimos 5 minutos (por la ruta)
     "hora",             # hora del día en decimal (7.5 = 7:30 a. m.)
     "dia_semana",       # 0 = lunes ... 6 = domingo
     "fin_de_semana",    # 1 si es sábado o domingo
 ]
 
 TIME_FMT = "%Y-%m-%d %H:%M:%S"
+VEL_MAX_KMH = 90      # más que esto es un salto del GPS, no la velocidad real del bus
 
 
 def haversine_m(lat1, lon1, lat2, lon2):
@@ -40,7 +47,7 @@ def haversine_m(lat1, lon1, lat2, lon2):
 
 def parse_time(text):
     try:
-        return datetime.strptime(text, TIME_FMT)
+        return datetime.strptime(str(text)[:19], TIME_FMT)
     except (TypeError, ValueError):
         return None
 
@@ -51,68 +58,93 @@ def time_features(dt):
     return {"hora": round(hora, 3), "dia_semana": dow, "fin_de_semana": 1 if dow >= 5 else 0}
 
 
-class RefRoute:
-    """Ruta de referencia: puntos (lat, lon) con su distancia acumulada en metros."""
-
-    def __init__(self, points):
-        self.pts = [(float(a), float(b)) for a, b in points]
-        self.cum = [0.0]
-        for (a1, b1), (a2, b2) in zip(self.pts, self.pts[1:]):
-            self.cum.append(self.cum[-1] + haversine_m(a1, b1, a2, b2))
-
-    @property
-    def length_m(self):
-        return self.cum[-1] if self.cum else 0.0
-
-    @classmethod
-    def load(cls, path):
-        with open(path, encoding="utf-8") as f:
-            data = json.load(f)
-        return cls(data["points"])
-
-    def save(self, path, meta=None):
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump({"points": [[round(a, 6), round(b, 6)] for a, b in self.pts],
-                       "length_m": round(self.length_m, 1), **(meta or {})}, f)
-
-    def project(self, lat, lon):
-        """Punto de la ruta más cercano a (lat, lon).
-        Devuelve (metros desde el inicio de la ruta, índice del punto, metros hasta la ruta)."""
-        best_i, best_d = 0, float("inf")
-        for i, (a, b) in enumerate(self.pts):
-            d = haversine_m(lat, lon, a, b)
-            if d < best_d:
-                best_i, best_d = i, d
-        return self.cum[best_i], best_i, best_d
-
-    def between(self, i, j):
-        """Puntos de la ruta entre dos índices (para dibujar la línea en el mapa)."""
-        if i <= j:
-            seg = self.pts[i:j + 1]
-        else:
-            seg = list(reversed(self.pts[j:i + 1]))
-        step = max(1, len(seg) // 250)
-        out = seg[::step]
-        if seg and out[-1] != seg[-1]:
-            out.append(seg[-1])
-        return out
+def velocidad_kmh(prog, times, i, ventana_s):
+    """Velocidad media por la ruta (km/h) en la ventana que termina en la lectura i.
+    prog = avance acumulado (m) de cada lectura; times = datetime de cada lectura."""
+    k = i
+    while k > 0 and (times[i] - times[k - 1]).total_seconds() <= ventana_s:
+        k -= 1
+    dt = (times[i] - times[k]).total_seconds()
+    if dt < 20:
+        return 0.0
+    return min(VEL_MAX_KMH, max(0.0, (prog[i] - prog[k]) / dt * 3.6))
 
 
-def build_features(dist_ruta_m, dist_recta_m, avance_m, sentido, vel_actual_kmh, dt):
+def tiempo_ref(R, p_bus, p_destino):
+    """Segundos que tardó la vuelta de referencia entre dos avances acumulados (p_destino >= p_bus)."""
+    return max(0.0, R.at(p_destino)[2] - R.at(p_bus)[2])
+
+
+def build_features(dist_ruta_m, dist_recta_m, tiempo_ref_s, avance_m, destino_m, vel_actual_kmh, vel_5min_kmh, dt):
     f = {
         "dist_ruta_m": round(dist_ruta_m, 1),
         "dist_recta_m": round(dist_recta_m, 1),
+        "tiempo_ref_s": round(tiempo_ref_s, 1),
         "avance_m": round(avance_m, 1),
-        "sentido": int(sentido),
+        "destino_m": round(destino_m, 1),
         "vel_actual_kmh": round(vel_actual_kmh or 0.0, 2),
+        "vel_5min_kmh": round(vel_5min_kmh or 0.0, 2),
     }
     f.update(time_features(dt))
     return f
 
 
+# ---------- Red neuronal ----------
+LARGO_VUELTA_M = 46200.0
+MLP_INPUTS = ["dist_ruta_m", "dist_recta_m", "tiempo_ref_s", "avance_sin", "avance_cos",
+              "destino_sin", "destino_cos", "vel_actual_kmh", "vel_5min_kmh", "hora"]
+
+
+def mlp_inputs(X, features=FEATURES):
+    """Entradas de la red a partir de las variables del modelo (matriz con columnas en `features`).
+    La posición en la vuelta va como seno y coseno: así el km 46,2 queda pegado al km 0
+    (es el mismo punto), cosa que la red no sabría si le llega el número tal cual."""
+    import numpy as np
+    X = np.asarray(X, dtype=float)
+    c = {k: X[:, i] for i, k in enumerate(features)}
+    ang_a = 2 * np.pi * c["avance_m"] / LARGO_VUELTA_M
+    ang_d = 2 * np.pi * c["destino_m"] / LARGO_VUELTA_M
+    cols = {"avance_sin": np.sin(ang_a), "avance_cos": np.cos(ang_a),
+            "destino_sin": np.sin(ang_d), "destino_cos": np.cos(ang_d)}
+    return np.column_stack([cols[k] if k in cols else c[k] for k in MLP_INPUTS])
+
+
+class MLPJson:
+    """Red neuronal densa guardada como JSON y evaluada con numpy.
+    entradas (mlp_inputs) escaladas -> capas ocultas ReLU -> corrección en minutos.
+    Tiempo predicho = tiempo de la vuelta de referencia + corrección."""
+
+    def __init__(self, data):
+        import numpy as np
+        self.np = np
+        self.mean = np.array(data["x_mean"], dtype=float)
+        self.scale = np.array(data["x_scale"], dtype=float)
+        self.W = [np.array(w, dtype=float) for w in data["pesos"]]
+        self.b = [np.array(b, dtype=float) for b in data["sesgos"]]
+        self.y_scale = float(data.get("y_escala", 60.0))   # la red predice minutos
+
+    def predict(self, rows):
+        np = self.np
+        X = np.asarray(rows, dtype=float)
+        h = (mlp_inputs(X) - self.mean) / self.scale
+        for k, (w, b) in enumerate(zip(self.W, self.b)):
+            h = h @ w + b
+            if k < len(self.W) - 1:
+                h = np.maximum(h, 0)          # ReLU en las capas ocultas
+        ref = X[:, FEATURES.index("tiempo_ref_s")]
+        return np.maximum(ref + h[:, 0] * self.y_scale, 0)
+
+
 def load_model(path):
-    """Carga el modelo guardado por entrenar.py. Devuelve None si no existe o falta joblib/scikit-learn."""
+    """Carga el modelo que guardó entrenar.py.
+    - .json: red neuronal (solo necesita numpy)
+    - .joblib: modelo de scikit-learn (necesita la misma versión con la que se entrenó)
+    Devuelve un dict con "model", "nombre", "features", ... o None."""
     try:
+        if path.endswith(".json"):
+            with open(path, encoding="utf-8") as f:
+                data = json.load(f)
+            return {**{k: v for k, v in data.items() if k not in ("pesos", "sesgos")}, "model": MLPJson(data)}
         import joblib
         bundle = joblib.load(path)
         if not isinstance(bundle, dict) or "model" not in bundle:

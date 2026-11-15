@@ -186,3 +186,5 @@ aside > *:nth-child(2) { animation-delay: .06s; } aside > *:nth-child(3) { anima
 /* Tabla de recorridos: una vuelta sin terminar (en curso o con datos cortados) */
 .route-tag { display: inline-block; margin-left: 6px; padding: 0 7px; border-radius: 999px; font-size: 11px; font-weight: 600;
   color: #e5a23b; border: 1px solid color-mix(in srgb, #e5a23b 60%, transparent); }
+.route-tag.corta { color: #4c8dff; border-color: color-mix(in srgb, #4c8dff 60%, transparent); }
+.route-tag.gap { color: var(--muted, #9aa6ba); border-color: color-mix(in srgb, #9aa6ba 50%, transparent); }

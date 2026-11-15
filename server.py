@@ -158,26 +158,30 @@ _eta_cache_lock = threading.Lock()
 #   ml       -> modelo propio; si no se puede, el estimado (sin TomTom)
 #   tomtom   -> como antes: TomTom y, si falla, el estimado
 #   estimado -> solo la fórmula (distancia / velocidad)
-# El modelo y la ruta los generan ml/exportar_dataset.py y ml/entrenar.py.
-# Si no existen (o falta scikit-learn), el servidor funciona igual que antes.
+# El modelo lo generan ml/exportar_dataset.py y ml/entrenar.py (red neuronal guardada en
+# ml/modelo_eta_mlp.json; se evalúa con numpy). La posición del bus y del usuario sobre la ruta
+# sale de ruta_referencia.json (vueltas.py). Si falta algo, el servidor funciona igual que antes.
 ETA_METHOD = os.environ.get("ETA_METHOD", "auto").strip().lower()
 _BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-ML_MODEL_PATH = os.environ.get("ML_MODEL_PATH", os.path.join(_BASE_DIR, "ml", "modelo_eta.joblib"))
-ML_ROUTE_PATH = os.environ.get("ML_ROUTE_PATH", os.path.join(_BASE_DIR, "ml", "ruta_referencia.json"))
-ML_MAX_OFF_ROUTE_M = 300     # si el bus está a más de esto de la ruta conocida, no se usa el modelo
+_ML_DEFAULT = os.path.join(_BASE_DIR, "ml", "modelo_eta_mlp.json")
+if not os.path.exists(_ML_DEFAULT):
+    _ML_DEFAULT = os.path.join(_BASE_DIR, "ml", "modelo_eta.joblib")
+ML_MODEL_PATH = os.environ.get("ML_MODEL_PATH", _ML_DEFAULT)
+ML_MAX_OFF_ROUTE_M = 200     # si el usuario está a más de esto de la ruta, no se usa el modelo
+ML_HISTORY_MIN = 10          # minutos de lecturas recientes para ubicar al bus en la ruta
 _ML_MODEL = None
-_ML_ROUTE = None
-if ETA_METHOD in ("auto", "ml") and os.path.exists(ML_MODEL_PATH) and os.path.exists(ML_ROUTE_PATH):
+if ETA_METHOD in ("auto", "ml") and os.path.exists(ML_MODEL_PATH):
     try:
-        from ml.eta_ml import RefRoute, build_features as ml_build_features, load_model, predict_seconds
+        from ml.eta_ml import build_features as ml_build_features, load_model, predict_seconds
+        from ml.eta_ml import tiempo_ref as ml_tiempo_ref, velocidad_kmh as ml_velocidad
         _ML_MODEL = load_model(ML_MODEL_PATH)
-        _ML_ROUTE = RefRoute.load(ML_ROUTE_PATH) if _ML_MODEL else None
         if _ML_MODEL:
             print(f"[ML] Modelo de llegada cargado: {_ML_MODEL.get('nombre')} "
-                  f"({_ML_MODEL.get('recorridos')} recorridos, entrenado {_ML_MODEL.get('entrenado')})")
+                  f"({_ML_MODEL.get('vueltas', _ML_MODEL.get('recorridos'))} vueltas, "
+                  f"entrenado {_ML_MODEL.get('entrenado')})")
     except Exception as exc:
         print(f"[ML] No se pudo cargar el modelo, se sigue sin ML: {exc}")
-        _ML_MODEL = _ML_ROUTE = None
+        _ML_MODEL = None
 
 # ---------- Semana 3: métricas de uso (página oculta /metricas) ----------
 # Si METRICS_KEY tiene valor, /metricas solo abre con ?key=<valor>; si no, cualquiera con el enlace.
@@ -962,44 +966,63 @@ def compute_eta(blat, blon, ulat, ulon, speed_kmh, bus: str = None):
     return result
 
 
-def ml_eta(rows, blat, blon, ulat, ulon, speed_kmh):
-    """Tiempo de llegada con el modelo propio (entrenado con recorridos reales).
-    El destino es el punto de la ruta de referencia más cercano al usuario.
-    Devuelve None si no se puede usar (sin modelo, bus fuera de la ruta o yendo
-    en sentido contrario al usuario); entonces se usa TomTom o el estimado."""
-    if not (_ML_MODEL and _ML_ROUTE):
-        return None
-    b_cum, b_i, b_off = _ML_ROUTE.project(blat, blon)
-    u_cum, u_i, _ = _ML_ROUTE.project(ulat, ulon)
-    if b_off > ML_MAX_OFF_ROUTE_M:
-        return None
-    sentido = 1 if u_cum >= b_cum else 0
+def ml_eta(bus, blat, blon, ulat, ulon):
+    """Tiempo de llegada con el modelo propio (red neuronal entrenada con vueltas reales).
 
-    # ¿Hacia dónde va el bus sobre la ruta? (posición de hace 25-120 s)
-    t_new = parse_dt(rows[0][2])
-    for la, lo, g, _ in rows[1:]:
-        t_old = parse_dt(g)
-        if t_new and t_old and 25 <= (t_new - t_old).total_seconds() <= 120:
-            avance = b_cum - _ML_ROUTE.project(la, lo)[0]
-            if abs(avance) > 20 and (avance > 0) != (sentido == 1):
-                return None   # el bus va en sentido contrario: tiene que dar la vuelta
-            break
+    1. Ubica al bus en la ruta con sus lecturas de los últimos minutos (vueltas.avance).
+    2. Ubica al usuario: la siguiente pasada del bus por el punto de la ruta más cercano a él.
+       Como la ruta es una vuelta cerrada, el bus siempre llega; no importa hacia dónde vaya ahora.
+    3. Arma las variables igual que en el entrenamiento y le pide el tiempo al modelo.
+    Devuelve None si no se puede usar (sin modelo, usuario lejos de la ruta, bus fuera de la ruta
+    o esperando en el punto de inicio); entonces se usa TomTom o el estimado."""
+    R = ROUTE_REF
+    if not (_ML_MODEL and R):
+        return None
+    rows = list(reversed(get_recent_locations(limit=ML_HISTORY_MIN * 6 + 10, bus=bus)))
+    if not rows:
+        return None
+    t_last = parse_dt(rows[-1][2])
+    rows = [r for r in rows if t_last and parse_dt(r[2]) and
+            (t_last - parse_dt(r[2])).total_seconds() <= ML_HISTORY_MIN * 60]
+    on, P, _links = vueltas.avance([(r[0], r[1], r[2]) for r in rows], R)
+    if not on or on[-1] != len(rows) - 1:
+        return None                       # la última lectura del bus no está sobre la ruta
+    prog = [P[i] for i in on]
+    times = [parse_dt(rows[i][2]) for i in on]
+    p_bus = prog[-1]
+    s_bus = p_bus % R.L
+    v1 = ml_velocidad(prog, times, len(prog) - 1, 60)
+    v5 = ml_velocidad(prog, times, len(prog) - 1, 300)
+    if (s_bus < 300 or s_bus > R.L - 300) and v1 < 3:
+        return None                       # esperando en el inicio: no se sabe cuándo sale
 
-    dist_ruta = abs(u_cum - b_cum)
-    dest_lat, dest_lon = _ML_ROUTE.pts[u_i]
+    cands = [(k, d) for k, d in R.cands(ulat, ulon) if d <= ML_MAX_OFF_ROUTE_M]
+    if not cands:
+        return None
+    k, _ = min(cands, key=lambda c: (R.p[c[0]][2] - s_bus) % R.L)   # la próxima pasada
+    dist_ruta = (R.p[k][2] - s_bus) % R.L
+    if dist_ruta < 50:
+        return None
+    dest_lat, dest_lon = R.p[k][0], R.p[k][1]
     feats = ml_build_features(
         dist_ruta_m=dist_ruta,
         dist_recta_m=haversine_m(blat, blon, dest_lat, dest_lon),
-        avance_m=b_cum, sentido=sentido, vel_actual_kmh=speed_kmh or 0.0,
-        dt=t_new or now_local(),
+        tiempo_ref_s=ml_tiempo_ref(R, p_bus, p_bus + dist_ruta),
+        avance_m=s_bus, destino_m=R.p[k][2],
+        vel_actual_kmh=v1, vel_5min_kmh=v5, dt=times[-1] or now_local(),
     )
     try:
         seconds = predict_seconds(_ML_MODEL, feats)
     except Exception as exc:
         print(f"[ML] Falló la predicción, se usa TomTom/estimado: {exc}")
         return None
-    path = _ML_ROUTE.between(b_i, u_i)
-    path = [(blat, blon)] + list(path[1:]) if path else [(blat, blon), (ulat, ulon)]
+    path = [(blat, blon)]
+    s = 100.0
+    while s < dist_ruta:
+        la, lo, _ = R.at(s_bus + s)
+        path.append((la, lo))
+        s += 100.0
+    path.append((dest_lat, dest_lon))
     return seconds, dist_ruta, 0, path, "modelo"
 
 
@@ -1724,7 +1747,7 @@ def eta_for_bus(bid, ulat, ulon):
         return {**base, "status": "here", "straight_m": round(straight), "trend": trend}
 
     # Método de cálculo según ETA_METHOD: modelo propio -> TomTom -> estimado
-    result = ml_eta(rows, blat, blon, ulat, ulon, speed) if ETA_METHOD in ("auto", "ml") else None
+    result = ml_eta(bid, blat, blon, ulat, ulon) if ETA_METHOD in ("auto", "ml") else None
     if result is None and ETA_METHOD in ("ml", "estimado"):
         result = (*estimate_eta(blat, blon, ulat, ulon, speed), "estimado")
     if result is None:

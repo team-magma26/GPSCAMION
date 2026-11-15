@@ -188,21 +188,21 @@ def match(rows, R, max_off=10):
     return out
 
 
-def day_loops(rows, R):
-    """Vueltas de un bus en un día.
+def avance(rows, R):
+    """Avance acumulado en la ruta de cada lectura.
 
     rows = [(lat, lon, 'YYYY-MM-DD HH:MM:SS'), ...] ordenadas por hora.
-    Devuelve una lista de dict: start, end, kind (vuelta | vuelta corta | vuelta estimada |
-    vuelta corta estimada | incompleta), points [(lat, lon, hora, estimado)], observed_km, est_km,
-    gaps [(desde, hasta, metros)], from_km, to_km."""
+    Devuelve (on, P, links):
+      on    = índices de las lecturas que quedaron sobre la ruta
+      P     = {índice: metros acumulados desde el inicio de la primera vuelta del día}
+      links = {índice: (índice anterior, tipo)} con tipo ok | gap | skip | cut
+              (gap = hueco que se puede rellenar, skip = se saltó un tramo, cut = hueco demasiado largo)"""
     rows = [(float(r[0]), float(r[1]), str(r[2])[:19]) for r in rows]
     m = match(rows, R)
     L = R.L
     on = [i for i, x in enumerate(m) if x is not None]
-    if len(on) < 2:
-        return []
-
-    # 1) avance acumulado P de cada lectura en la ruta y tipo de cada tramo
+    if not on:
+        return on, {}, {}
     P = {on[0]: R.p[m[on[0]]][2]}
     links = {}
     for a, b in zip(on, on[1:]):
@@ -221,6 +221,22 @@ def day_loops(rows, R):
             kind = "skip"                       # se saltó un tramo de la referencia
         P[b] = (math.floor(P[a] / L) + 1) * L + R.p[m[b]][2] if kind == "cut" else P[a] + ds
         links[b] = (a, kind)
+    return on, P, links
+
+
+def day_loops(rows, R):
+    """Vueltas de un bus en un día.
+
+    rows = [(lat, lon, 'YYYY-MM-DD HH:MM:SS'), ...] ordenadas por hora.
+    Devuelve una lista de dict: start, end, kind (vuelta | vuelta corta | vuelta estimada |
+    vuelta corta estimada | incompleta), points [(lat, lon, hora, estimado)], observed_km, est_km,
+    gaps [(desde, hasta, metros)], from_km, to_km."""
+    rows = [(float(r[0]), float(r[1]), str(r[2])[:19]) for r in rows]
+    L = R.L
+    # 1) avance acumulado P de cada lectura en la ruta y tipo de cada tramo
+    on, P, links = avance(rows, R)
+    if len(on) < 2:
+        return []
 
     # 2) cortar en vueltas: el número de vuelta solo sube
     loops, cur = [], None

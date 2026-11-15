@@ -104,7 +104,7 @@ h1 { font-size: 1.3rem; font-weight: 800; margin: 0; letter-spacing: -.2px; }
 .routes-table td, .routes-table th { border-color: var(--line); }
 .routes-table .todos-row td { font-weight: 800; color: var(--accent); }
 .route-swatch { width: 12px; height: 12px; border-radius: 50%; display: inline-block; margin-right: 8px; vertical-align: middle; }
-.sim-box { border-top: 1px solid var(--line); margin-top: 18px; padding-top: 16px; }
+.sim-box { border-block: 1px solid var(--line); margin-top: 18px; padding-block: 16px; }
 
 /* ---- Mapas (más grandes) ---- */
 .map { width: 100%; height: calc(100vh - 150px); min-height: 600px; border-radius: var(--r); border: 1px solid var(--line); }

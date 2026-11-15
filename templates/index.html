@@ -204,6 +204,24 @@
 
         <div class="notice d-none" id="historyBanner"></div>
 
+        <div class="sim-box d-none" id="simPanel">
+          <div class="panel-title" style="font-size:15px;margin-bottom:12px">Simular recorrido
+            <button type="button" class="info-btn" data-bs-toggle="popover" aria-label="Más información"
+              data-bs-title="Simular recorrido" data-bs-content="Reproduce la ruta como un video: el bus se mueve punto por punto. Arrastra la barra para saltar a otro momento y sube la velocidad si va muy lento."></button>
+          </div>
+          <select class="form-select form-select-sm mb-3" id="simRoute" aria-label="Ruta a simular"></select>
+          <input type="range" class="form-range" id="simSlider" min="0" max="0" step="1" value="0" aria-label="Punto del recorrido">
+          <div class="muted mb-3" id="simInfo">--</div>
+          <div class="d-flex gap-2 align-items-center">
+            <button class="btn btn-primary btn-sm" id="simPlay">▶ Reproducir</button>
+            <button class="btn btn-quiet btn-sm" id="simReset" aria-label="Volver al inicio">⟲</button>
+            <select class="form-select form-select-sm w-auto ms-auto" id="simSpeed" aria-label="Velocidad">
+              <option value="1">1×</option><option value="2">2×</option><option value="5" selected>5×</option>
+              <option value="10">10×</option><option value="20">20×</option>
+            </select>
+          </div>
+        </div>
+
         <div class="mt-4">
           <table class="table table-sm align-middle routes-table">
             <thead><tr><th></th><th>Ruta</th><th title="Cantidad de ubicaciones que envió el bus durante la ruta">Lecturas</th></tr></thead>
@@ -225,23 +243,6 @@
           </div>
         </div>
 
-        <div class="sim-box d-none" id="simPanel">
-          <div class="panel-title" style="font-size:15px;margin-bottom:12px">Simular recorrido
-            <button type="button" class="info-btn" data-bs-toggle="popover" aria-label="Más información"
-              data-bs-title="Simular recorrido" data-bs-content="Reproduce la ruta como un video: el bus se mueve punto por punto. Arrastra la barra para saltar a otro momento y sube la velocidad si va muy lento."></button>
-          </div>
-          <select class="form-select form-select-sm mb-3" id="simRoute" aria-label="Ruta a simular"></select>
-          <input type="range" class="form-range" id="simSlider" min="0" max="0" step="1" value="0" aria-label="Punto del recorrido">
-          <div class="muted mb-3" id="simInfo">--</div>
-          <div class="d-flex gap-2 align-items-center">
-            <button class="btn btn-primary btn-sm" id="simPlay">▶ Reproducir</button>
-            <button class="btn btn-quiet btn-sm" id="simReset" aria-label="Volver al inicio">⟲</button>
-            <select class="form-select form-select-sm w-auto ms-auto" id="simSpeed" aria-label="Velocidad">
-              <option value="1">1×</option><option value="2">2×</option><option value="5" selected>5×</option>
-              <option value="10">10×</option><option value="20">20×</option>
-            </select>
-          </div>
-        </div>
       </div>
 
       <!-- HISTÓRICO: POR LUGAR -->

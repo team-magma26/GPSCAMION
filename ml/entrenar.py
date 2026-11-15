@@ -37,6 +37,13 @@ from sklearn.linear_model import LinearRegression
 from sklearn.model_selection import GroupKFold
 from sklearn.neural_network import MLPRegressor
 from sklearn.preprocessing import StandardScaler
+import warnings
+from sklearn.exceptions import ConvergenceWarning
+
+# Al escoger la arquitectura, las redes de prueba entrenan máximo 150 épocas para que sea rápido;
+# algunas todavía estarían mejorando un poco y scikit-learn avisa "hasn't converged yet". No es un
+# error: solo se usan para comparar entre ellas. La red final entrena hasta 300 épocas con parada temprana.
+warnings.filterwarnings("ignore", category=ConvergenceWarning)
 
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, BASE)
@@ -74,12 +81,12 @@ class RedNeuronal:
     Salida: cuántos minutos más (o menos) que la vuelta de referencia tarda el bus en ese tramo.
     Predecir la corrección y no el tiempo completo le funcionó mejor con pocas vueltas."""
 
-    def __init__(self, hidden_layer_sizes=(64, 32), alpha=1e-3, max_iter=300, seed=42):
+    def __init__(self, hidden_layer_sizes=(64, 32), alpha=1e-3, max_iter=300, seed=42, verbose=False):
         self.scaler = StandardScaler()
         self.net = MLPRegressor(hidden_layer_sizes=hidden_layer_sizes, activation="relu", solver="adam",
                                 alpha=alpha, learning_rate_init=1e-3, batch_size=256, max_iter=max_iter,
                                 early_stopping=True, validation_fraction=0.15, n_iter_no_change=15,
-                                random_state=seed)
+                                random_state=seed, verbose=verbose)
         self.hidden = hidden_layer_sizes
         self.alpha = alpha
 
@@ -106,12 +113,15 @@ def elegir_mlp(X, y, g, max_filas, rng):
         X, y, g = X[idx], y[idx], g[idx]
     k = min(3, len(set(g)))
     best = None
+    print("   probando arquitecturas de la red (error con vueltas que no vio):")
     for params in MLP_GRID:
         errs = []
         for tr, te in GroupKFold(n_splits=k).split(X, y, g):
             m = RedNeuronal(**params, max_iter=150).fit(X[tr], y[tr])
             errs.append(np.mean(np.abs(m.predict(X[te]) - y[te])))
         e = float(np.mean(errs))
+        capas = " -> ".join(str(c) for c in (10, *params["hidden_layer_sizes"], 1))
+        print(f"      {capas:16s} alpha {params['alpha']:<5}  error {e / 60:5.2f} min")
         if best is None or e < best[0]:
             best = (e, params)
     return best[1]
@@ -123,6 +133,7 @@ def main():
     ap.add_argument("--salida", default=os.path.join(BASE, "ml", "modelo_eta_mlp.json"))
     ap.add_argument("--rondas", type=int, default=5, help="Rondas de validación cruzada (por vueltas)")
     ap.add_argument("--rapido", action="store_true", help="Usa menos filas para escoger la red (más rápido)")
+    ap.add_argument("--ver", action="store_true", help="Muestra la pérdida de la red final en cada época")
     args = ap.parse_args()
     carpeta = os.path.dirname(os.path.abspath(args.salida))
     rng = np.random.default_rng(42)
@@ -158,7 +169,8 @@ def main():
         params = elegir_mlp(X[tr], y[tr], g[tr], max_filas, rng)
         elegidas.append(params)
         pred["Red neuronal (MLP)"][te] = RedNeuronal(**params).fit(X[tr], y[tr]).predict(X[te])
-        print(f"   red escogida: capas {params['hidden_layer_sizes']}, alpha {params['alpha']}")
+        capas = " -> ".join(str(c) for c in (10, *params["hidden_layer_sizes"], 1))
+        print(f"   red escogida (la de menor error): {capas}, alpha {params['alpha']}")
 
     # Predicciones de la validación (cada fila predicha por un modelo que no vio su vuelta)
     out = df[["vuelta", "bus", "hora_origen", "dist_ruta_m", "segundos"]].copy()
@@ -199,7 +211,9 @@ def main():
     # Red final: la arquitectura que más veces ganó, entrenada con todos los datos
     claves = [json.dumps({"h": list(p["hidden_layer_sizes"]), "a": p["alpha"]}) for p in elegidas]
     top = json.loads(max(set(claves), key=claves.count))
-    final = RedNeuronal(hidden_layer_sizes=tuple(top["h"]), alpha=top["a"]).fit(X, y)
+    if args.ver:
+        print(f"\nEntrenando la red final {[10, *top['h'], 1]} con todos los datos (pérdida por época):")
+    final = RedNeuronal(hidden_layer_sizes=tuple(top["h"]), alpha=top["a"], verbose=args.ver).fit(X, y)
     data = {
         "nombre": "Red neuronal (MLP)", "features": FEATURES, **final.a_json(),
         "metricas_validacion": next(f for f in filas if f["modelo"] == "Red neuronal (MLP)"),

@@ -188,3 +188,25 @@ aside > *:nth-child(2) { animation-delay: .06s; } aside > *:nth-child(3) { anima
   color: #e5a23b; border: 1px solid color-mix(in srgb, #e5a23b 60%, transparent); }
 .route-tag.corta { color: #4c8dff; border-color: color-mix(in srgb, #4c8dff 60%, transparent); }
 .route-tag.gap { color: var(--muted, #9aa6ba); border-color: color-mix(in srgb, #9aa6ba 50%, transparent); }
+
+/* Invitación a la encuesta de satisfacción (09_encuesta.js): tarjeta abajo a la derecha, no bloquea la página */
+.survey {
+  position: fixed; z-index: 1100; right: 20px; bottom: 20px; width: min(360px, calc(100vw - 32px));
+  display: flex; gap: 12px; padding: 16px 16px 14px; border-radius: var(--r);
+  background: var(--surface); border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--line));
+  box-shadow: 0 14px 40px rgba(0,0,0,.45); color: var(--text);
+  opacity: 0; transform: translateY(16px); transition: opacity .3s, transform .3s;
+}
+.survey.show { opacity: 1; transform: none; }
+.survey .sv-ico { flex-shrink: 0; width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center;
+  background: color-mix(in srgb, #ffd166 18%, transparent); color: #ffd166; }
+.survey .sv-ico svg { width: 20px; height: 20px; }
+.survey .sv-body b { display: block; font-size: 15px; margin-bottom: 2px; padding-right: 18px; }
+.survey .sv-body span { display: block; font-size: 13px; color: var(--muted); }
+.survey .sv-actions { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+.survey .sv-actions .btn { min-height: 38px; display: inline-flex; align-items: center; text-decoration: none; }
+.survey .sv-x { position: absolute; top: 6px; right: 8px; width: 32px; height: 32px; border: 0; background: none;
+  color: var(--muted); font-size: 22px; line-height: 1; border-radius: 8px; }
+.survey .sv-x:hover { color: var(--text); background: var(--raise); }
+@media (max-width: 575px) { .survey { right: 16px; left: 16px; bottom: 16px; width: auto; } }
+@media (prefers-reduced-motion: reduce) { .survey { transition: none; } }

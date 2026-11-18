@@ -123,6 +123,11 @@ db_lock = threading.Lock()
 
 
 SESSION_GAP_SECONDS = 60
+# Buffer de la app: si el celular estuvo sin internet, al volver la señal manda las tramas
+# guardadas con su hora original. Una trama con más de LATE_FRAME_SECONDS de atraso se guarda
+# en la base de datos (rellena el recorrido y baja las "lecturas perdidas"), pero NO se avisa
+# en vivo: si no, el bus saltaría en el mapa a posiciones viejas.
+LATE_FRAME_SECONDS = 120
 
 
 PASSAGE_GAP_SECONDS = 300
@@ -412,6 +417,11 @@ def save_location(lat: float, lon: float, gps_time: str, extras: dict = None, bu
         _last_packet_dt[bus] = received_at_dt
         session_id = _active_session_id[bus]
 
+    try:
+        late = (received_at_dt - datetime.strptime(gps_time, "%Y-%m-%d %H:%M:%S")).total_seconds() > LATE_FRAME_SECONDS
+    except ValueError:
+        late = False
+
     payload = {**location_to_payload(lat, lon, gps_time), "account_id": ACCOUNT_ID,
                "bus": bus, "received_at": received_at}
     if extras.get("battery_v") is not None:
@@ -430,10 +440,11 @@ def save_location(lat: float, lon: float, gps_time: str, extras: dict = None, bu
              extras.get("battery_v"), extras.get("signal_csq"), extras.get("seq"), bus,
              extras.get("battery_pct")),
         )
-        cur.execute(
-            f"NOTIFY {NOTIFY_CHANNEL}, %s",
-            (json.dumps(payload),)
-        )
+        if not late:                       # las atrasadas (del buffer) no se mueven en vivo
+            cur.execute(
+                f"NOTIFY {NOTIFY_CHANNEL}, %s",
+                (json.dumps(payload),)
+            )
         conn.commit()
         cur.close()
         conn.close()

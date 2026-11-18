@@ -309,6 +309,20 @@
   </div>
 </main>
 
+<!-- Invitación a la encuesta de satisfacción (static/js/09_encuesta.js) -->
+<aside class="survey d-none" id="survey" role="dialog" aria-labelledby="svTitle">
+  <button type="button" class="sv-x" id="svClose" aria-label="Cerrar">&times;</button>
+  <div class="sv-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3l2.6 5.6 6.1.7-4.5 4.2 1.2 6L12 16.6 6.6 19.5l1.2-6L3.3 9.3l6.1-.7z" fill="currentColor"/></svg></div>
+  <div class="sv-body">
+    <b id="svTitle">¿Nos ayudas con una encuesta?</b>
+    <span>Son 10 preguntas cortas sobre OnRoute, toma menos de 3 minutos y es anónima.</span>
+    <div class="sv-actions">
+      <a class="btn btn-primary btn-sm" id="svOpen" target="_blank" rel="noopener">Responder encuesta</a>
+      <button type="button" class="btn btn-outline-secondary btn-sm" id="svLater">Ahora no</button>
+    </div>
+  </div>
+</aside>
+
 <div class="modal fade" id="appModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered modal-sm">
     <div class="modal-content" style="background:var(--surface);border:1px solid var(--line);border-radius:var(--r)">
@@ -332,6 +346,7 @@
 <script src="{{ url_for('static', filename='js/06_lugar.js') }}?v={{ asset_v }}"></script>
 <script src="{{ url_for('static', filename='js/07_llegada.js') }}?v={{ asset_v }}"></script>
 <script src="{{ url_for('static', filename='js/08_inicio.js') }}?v={{ asset_v }}"></script>
+<script src="{{ url_for('static', filename='js/09_encuesta.js') }}?v={{ asset_v }}"></script>
 
 </body>
 </html>

@@ -1,6 +1,6 @@
 modelo,MAE_min,RMSE_min,MAPE_%,dentro_de_2_min_%
-Random Forest,5.35,8.17,25.2,37.2
-Gradient Boosting,5.75,8.42,32.3,33.1
-Regresión lineal,5.97,8.07,45.0,23.9
-Red neuronal (MLP),6.09,9.02,35.0,30.5
-Fórmula actual (línea base),13.58,19.01,51.8,17.3
+Random Forest,4.64,7.22,22.1,40.7
+Gradient Boosting,4.85,7.39,26.6,36.7
+Regresión lineal,5.44,7.57,38.8,27.6
+Red neuronal (MLP),5.44,8.03,30.5,33.9
+Fórmula actual (línea base),13.9,19.39,51.4,16.8

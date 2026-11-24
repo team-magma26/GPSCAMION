@@ -63,7 +63,7 @@ document.querySelectorAll("#busFilter input").forEach((r) => r.addEventListener(
 if ($("busFilter")) { const r = document.querySelector(`#busFilter input[value="${busFilter}"]`); if (r) r.checked = true; }
 setFollow(true);
 map.on("dragstart", () => setFollow(false));
-$("clearTrail").addEventListener("click", () => busList().forEach((b) => { b.trail.setLatLngs([]); b.arrows.clearLayers(); }));
+$("clearTrail").addEventListener("click", () => busList().forEach((b) => b.trail.setLatLngs([])));
 
 // "Última ubicación recibida": la del bus que mandó más reciente
 function updateFields(data) {
@@ -106,7 +106,7 @@ function loadLiveHistory(fit) {
           b.marker.setLatLng([last.lat, last.lon]);
           b.hasPos = true;
         }
-        syncDirection(b, true);
+        syncDirection(b);
       })
       .catch(() => {})
   )).then(() => {

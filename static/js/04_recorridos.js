@@ -29,6 +29,8 @@ function drawRoute(route) {
     run.push([pts[i].lat, pts[i].lon]);
   }
   flush();
+  // Flechas con el sentido del recorrido (también sobre los tramos estimados)
+  arrowsAlong(pts.map((p) => [p.lat, p.lon]), route.color).forEach((m) => m.addTo(route.polyline));
 
   if (route.points.length > 0) {
     const first = route.points[0];
@@ -138,7 +140,7 @@ function updateHistoryViewState() {
   }
 
   if (anyRouteVisible()) {
-    busList().forEach((b) => b.trail.setLatLngs([]));
+    busList().forEach((b) => { b.trail.setLatLngs([]); b.arrows.clearLayers(); });
     const visiblePolylines = [...routesBySession.values()].filter((r) => r.visible && r.polyline).map((r) => r.polyline);
     if (visiblePolylines.length > 0) {
       map.fitBounds(L.featureGroup(visiblePolylines).getBounds(), { maxZoom: 15, padding: [20, 20] });
@@ -149,6 +151,7 @@ function updateHistoryViewState() {
 
 // ---------- Simulador de recorrido ----------
 const simMarker = L.marker([0, 0], { icon: mkIcon("sim"), zIndexOffset: 1000 });
+simMarker.on("add", () => applyHeading(simMarker));
 const simTrail = L.polyline([], { color: "#ffffff", weight: 5, opacity: 0.9 }).addTo(map);
 const sim = { route: null, id: null, pos: 0, playing: false, last: 0, raf: null };
 
@@ -202,6 +205,7 @@ function renderSim() {
 
   simMarker.setLatLng([lat, lon]);
   simTrail.setLatLngs(pts.slice(0, i + 1).map((p) => [p.lat, p.lon]));
+  setHeading(simMarker, headingOf(pts.slice(Math.max(0, i - DIR_LOOKBACK), i + 1).map((p) => [p.lat, p.lon])));
   $("simSlider").max = Math.max(n - 1, 0);
   $("simSlider").value = i;
   $("simSlider").setAttribute("aria-valuetext", `Punto ${i + 1} de ${n}, ${a.time}`);

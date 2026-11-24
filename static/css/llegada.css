@@ -147,6 +147,19 @@ aside > *:nth-child(2) { animation-delay: .06s; } aside > *:nth-child(3) { anima
 @keyframes bmPulse { 0% { transform: scale(.6); opacity: .9; } 100% { transform: scale(3.2); opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .bm-pulse { animation: none; display: none; } }
 
+/* Sentido de movimiento: flecha que gira alrededor del marcador (hacia dónde va el bus) */
+.bm-dir { position: absolute; left: 28px; top: 24px; width: 0; height: 0; z-index: -1; display: none;
+  transform: rotate(var(--hd, 0deg)); transition: transform .6s ease; }
+.bus-marker.has-dir .bm-dir { display: block; }
+.bm-dir svg { position: absolute; left: -14px; top: -60px; width: 28px; height: 28px; overflow: visible;
+  filter: drop-shadow(0 2px 3px rgba(0,0,0,.45)); }
+.bm-dir path { fill: var(--dc, var(--b1)); stroke: #fff; stroke-width: 2.6; stroke-linejoin: round; }
+/* Flechas pequeñas sobre la línea del recorrido */
+.trail-arrow { width: 18px; height: 18px; transform: rotate(var(--hd, 0deg)); }
+.trail-arrow svg { width: 18px; height: 18px; display: block; overflow: visible; filter: drop-shadow(0 1px 1px rgba(0,0,0,.4)); }
+.trail-arrow path { fill: var(--c, #2f74e6); stroke: #fff; stroke-width: 2.4; stroke-linejoin: round; }
+@media (prefers-reduced-motion: reduce) { .bm-dir { transition: none; } }
+
 /* Etiqueta con el nombre del bus ("Bus de Luis") encima del marcador */
 .leaflet-tooltip.bus-tag {
   background: #fff; color: #12398a; border: 2px solid #2f74e6; border-radius: 999px;

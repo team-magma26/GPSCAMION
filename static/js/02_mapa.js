@@ -10,7 +10,7 @@ const truckSvg = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" str
 const busSolidSvg = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="1.5" width="17" height="17" rx="3.5" fill="#fff"/><rect x="5.5" y="17" width="3.5" height="4.5" rx="1.2" fill="#fff"/><rect x="15" y="17" width="3.5" height="4.5" rx="1.2" fill="#fff"/><rect x="8" y="2.8" width="8" height="1.6" rx=".8" fill="currentColor"/><rect x="5.5" y="5.5" width="13" height="6.5" rx="1.4" fill="currentColor"/><circle cx="7.6" cy="15" r="1.3" fill="currentColor"/><circle cx="16.4" cy="15" r="1.3" fill="currentColor"/></svg>';
 const mkIcon = (cls, label) => L.divIcon({
   className: "",
-  html: `<div class="bus-marker ${cls}" role="img" aria-label="${cls === "sim" ? "Bus (simulación)" : label || BUS_NAME}"><span class="bm-pulse"></span><span class="bm-ground"></span><span class="bm-tip"></span><span class="bm-pin">${busSolidSvg}</span></div>`,
+  html: `<div class="bus-marker ${cls}" role="img" aria-label="${cls === "sim" ? "Bus (simulación)" : label || BUS_NAME}"><span class="bm-pulse"></span><span class="bm-ground"></span><span class="bm-dir"><svg viewBox="0 0 24 24"><path d="M12 2.5 20.5 20 12 15.2 3.5 20z"/></svg></span><span class="bm-tip"></span><span class="bm-pin">${busSolidSvg}</span></div>`,
   iconSize: [56, 62], iconAnchor: [28, 59], tooltipAnchor: [0, -58],
 });
 // ---------- Un marcador y una línea por cada bus de la ruta ----------
@@ -22,8 +22,11 @@ BUSES.forEach((b, i) => {
   // Etiqueta fija con el nombre del bus ("Bus de Luis") encima del marcador
   marker.bindTooltip(b.name, { permanent: true, direction: "top", className: `bus-tag bus-tag-${i}` });
   marker.on("click", () => focusOn(b.id));
+  marker._dirColor = color; // la flecha de sentido usa el color de la línea de este bus
+  marker.on("add", () => applyHeading(marker));
   const trail = L.polyline([], { color, weight: 5, opacity: 0.9 }).addTo(map);
-  buses[b.id] = { id: b.id, name: b.name, color, index: i, marker, trail, hasPos: false,
+  const arrows = L.layerGroup().addTo(map); // flechas de sentido sobre la línea del recorrido
+  buses[b.id] = { id: b.id, name: b.name, color, index: i, marker, trail, arrows, arrowTimer: null, hasPos: false,
                   lastMsgAt: 0, recentPoints: [], lastRoute: { start: null, end: null } };
 });
 const busList = () => BUSES.map((b) => buses[b.id]);
@@ -41,11 +44,105 @@ function setLiveBusesVisible(show) {
     const on = show && isShown(b);
     if (on && b.hasPos) { if (!map.hasLayer(b.marker)) b.marker.addTo(map); }
     else if (map.hasLayer(b.marker)) map.removeLayer(b.marker);
-    if (on) { if (!map.hasLayer(b.trail)) b.trail.addTo(map); }
-    else if (map.hasLayer(b.trail)) map.removeLayer(b.trail);   // se oculta sin perder la línea
-    if (!show) b.trail.setLatLngs([]);
+    if (on) { if (!map.hasLayer(b.trail)) b.trail.addTo(map); if (!map.hasLayer(b.arrows)) b.arrows.addTo(map); }
+    else {
+      if (map.hasLayer(b.trail)) map.removeLayer(b.trail);   // se oculta sin perder la línea
+      if (map.hasLayer(b.arrows)) map.removeLayer(b.arrows);
+    }
+    if (!show) { b.trail.setLatLngs([]); b.arrows.clearLayers(); }
   });
 }
+// ---------- Sentido de movimiento ----------
+// Flecha alrededor del marcador (hacia dónde va el bus ahora) y flechas sobre la línea del recorrido.
+// El mapa (Web Mercator) conserva los ángulos, así que el rumbo geográfico sirve directo para rotar.
+const DIR_MIN_M = 30;        // distancia mínima para calcular el rumbo (evita el ruido del GPS quieto)
+const DIR_LOOKBACK = 30;     // máximo de lecturas hacia atrás (~5 min a una lectura cada 10 s)
+const ARROW_SPACING_M = 400; // una flecha cada 400 m sobre la línea
+const ARROW_MAX = 120;       // tope de flechas por línea (en recorridos largos se separan más)
+const asLatLon = (p) => (Array.isArray(p) ? p : [p.lat, p.lng !== undefined ? p.lng : p.lon]);
+
+// Rumbo de a hacia b en grados (0 = norte, 90 = este)
+function bearingDeg(a, b) {
+  const r = Math.PI / 180;
+  const dLon = (b[1] - a[1]) * r;
+  const y = Math.sin(dLon) * Math.cos(b[0] * r);
+  const x = Math.cos(a[0] * r) * Math.sin(b[0] * r) - Math.sin(a[0] * r) * Math.cos(b[0] * r) * Math.cos(dLon);
+  return (Math.atan2(y, x) / r + 360) % 360;
+}
+
+// Rumbo actual: desde la última lectura que esté a más de DIR_MIN_M hasta la más reciente.
+// null si el bus no se ha movido lo suficiente (detenido o sin datos).
+function headingOf(points) {
+  const n = points.length;
+  if (n < 2) return null;
+  const z = asLatLon(points[n - 1]);
+  for (let i = n - 2; i >= 0 && n - 1 - i <= DIR_LOOKBACK; i--) {
+    const a = asLatLon(points[i]);
+    if (distM(a, z) >= DIR_MIN_M) return bearingDeg(a, z);
+  }
+  return null;
+}
+
+// Gira la flecha del marcador. Si apunta hacia arriba, sube un poco la etiqueta del nombre para no taparla.
+function setHeading(marker, deg) {
+  marker._heading = deg;
+  applyHeading(marker);
+}
+function applyHeading(marker) {
+  const el = marker.getElement();
+  const bm = el && el.querySelector(".bus-marker");
+  if (!bm) return;
+  const deg = marker._heading;
+  const has = deg !== null && deg !== undefined;
+  bm.classList.toggle("has-dir", has);
+  if (has) bm.style.setProperty("--hd", `${Math.round(deg)}deg`);
+  if (marker._dirColor) bm.style.setProperty("--dc", marker._dirColor);
+  const up = has && (deg > 300 || deg < 60);
+  const tt = marker.getTooltip();
+  if (tt) { tt.options.offset = L.point(0, up ? -34 : 0); if (tt.isOpen()) tt.update(); }
+}
+
+// Flechas pequeñas a lo largo de una línea, cada ARROW_SPACING_M, apuntando en el sentido del recorrido
+function arrowIcon(deg, color) {
+  return L.divIcon({
+    className: "",
+    html: `<div class="trail-arrow" style="--hd:${Math.round(deg)}deg;--c:${color}"><svg viewBox="0 0 24 24"><path d="M12 3 21 21 12 16 3 21z"/></svg></div>`,
+    iconSize: [18, 18], iconAnchor: [9, 9],
+  });
+}
+function arrowsAlong(points, color) {
+  const pts = points.map(asLatLon);
+  const out = [];
+  if (pts.length < 2) return out;
+  let total = 0;
+  for (let i = 1; i < pts.length; i++) total += distM(pts[i - 1], pts[i]);
+  const step = Math.max(ARROW_SPACING_M, total / ARROW_MAX);
+  let next = step / 2, acc = 0;
+  for (let i = 1; i < pts.length; i++) {
+    const a = pts[i - 1], b = pts[i], d = distM(a, b);
+    if (d < 1) continue;
+    while (acc + d >= next) {
+      const f = (next - acc) / d;
+      const p = [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f];
+      out.push(L.marker(p, { icon: arrowIcon(bearingDeg(a, b), color), interactive: false, keyboard: false }));
+      next += step;
+    }
+    acc += d;
+  }
+  return out;
+}
+
+// Actualiza la flecha del marcador y (con un pequeño retraso, para no redibujar en cada trama) las de la línea
+function syncDirection(b, now = false) {
+  const pts = b.trail.getLatLngs();
+  setHeading(b.marker, headingOf(pts));
+  clearTimeout(b.arrowTimer);
+  b.arrowTimer = setTimeout(() => {
+    b.arrows.clearLayers();
+    arrowsAlong(b.trail.getLatLngs(), b.color).forEach((m) => b.arrows.addLayer(m));
+  }, now ? 0 : 1500);
+}
+
 // Encuadra el mapa para que se vean todos los buses con su recorrido
 function fitLive() {
   const layers = [];

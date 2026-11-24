@@ -63,7 +63,7 @@ document.querySelectorAll("#busFilter input").forEach((r) => r.addEventListener(
 if ($("busFilter")) { const r = document.querySelector(`#busFilter input[value="${busFilter}"]`); if (r) r.checked = true; }
 setFollow(true);
 map.on("dragstart", () => setFollow(false));
-$("clearTrail").addEventListener("click", () => busList().forEach((b) => b.trail.setLatLngs([])));
+$("clearTrail").addEventListener("click", () => busList().forEach((b) => { b.trail.setLatLngs([]); b.arrows.clearLayers(); }));
 
 // "Última ubicación recibida": la del bus que mandó más reciente
 function updateFields(data) {
@@ -81,7 +81,7 @@ function updateMap(lat, lon, addToTrail = true, busId = null) {
   b.marker.setLatLng(point);
   b.hasPos = true;
   if (view === "live" && !historyMode && isShown(b) && !map.hasLayer(b.marker)) b.marker.addTo(map);
-  if (addToTrail) b.trail.addLatLng(point);
+  if (addToTrail) { b.trail.addLatLng(point); syncDirection(b); }
   if (!isShown(b)) return;   // un bus oculto por el selector no mueve el mapa
   if (!mapCentered) {
     map.setView(point, 15);
@@ -106,6 +106,7 @@ function loadLiveHistory(fit) {
           b.marker.setLatLng([last.lat, last.lon]);
           b.hasPos = true;
         }
+        syncDirection(b, true);
       })
       .catch(() => {})
   )).then(() => {

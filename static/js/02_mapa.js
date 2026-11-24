@@ -25,8 +25,7 @@ BUSES.forEach((b, i) => {
   marker._dirColor = color; // la flecha de sentido usa el color de la línea de este bus
   marker.on("add", () => applyHeading(marker));
   const trail = L.polyline([], { color, weight: 5, opacity: 0.9 }).addTo(map);
-  const arrows = L.layerGroup().addTo(map); // flechas de sentido sobre la línea del recorrido
-  buses[b.id] = { id: b.id, name: b.name, color, index: i, marker, trail, arrows, arrowTimer: null, hasPos: false,
+  buses[b.id] = { id: b.id, name: b.name, color, index: i, marker, trail, hasPos: false,
                   lastMsgAt: 0, recentPoints: [], lastRoute: { start: null, end: null } };
 });
 const busList = () => BUSES.map((b) => buses[b.id]);
@@ -44,21 +43,16 @@ function setLiveBusesVisible(show) {
     const on = show && isShown(b);
     if (on && b.hasPos) { if (!map.hasLayer(b.marker)) b.marker.addTo(map); }
     else if (map.hasLayer(b.marker)) map.removeLayer(b.marker);
-    if (on) { if (!map.hasLayer(b.trail)) b.trail.addTo(map); if (!map.hasLayer(b.arrows)) b.arrows.addTo(map); }
-    else {
-      if (map.hasLayer(b.trail)) map.removeLayer(b.trail);   // se oculta sin perder la línea
-      if (map.hasLayer(b.arrows)) map.removeLayer(b.arrows);
-    }
-    if (!show) { b.trail.setLatLngs([]); b.arrows.clearLayers(); }
+    if (on) { if (!map.hasLayer(b.trail)) b.trail.addTo(map); }
+    else if (map.hasLayer(b.trail)) map.removeLayer(b.trail);   // se oculta sin perder la línea
+    if (!show) b.trail.setLatLngs([]);
   });
 }
 // ---------- Sentido de movimiento ----------
-// Flecha alrededor del marcador (hacia dónde va el bus ahora) y flechas sobre la línea del recorrido.
+// Flecha alrededor del marcador: hacia dónde va el bus ahora.
 // El mapa (Web Mercator) conserva los ángulos, así que el rumbo geográfico sirve directo para rotar.
 const DIR_MIN_M = 30;        // distancia mínima para calcular el rumbo (evita el ruido del GPS quieto)
 const DIR_LOOKBACK = 30;     // máximo de lecturas hacia atrás (~5 min a una lectura cada 10 s)
-const ARROW_SPACING_M = 400; // una flecha cada 400 m sobre la línea
-const ARROW_MAX = 120;       // tope de flechas por línea (en recorridos largos se separan más)
 const asLatLon = (p) => (Array.isArray(p) ? p : [p.lat, p.lng !== undefined ? p.lng : p.lon]);
 
 // Rumbo de a hacia b en grados (0 = norte, 90 = este)
@@ -102,45 +96,9 @@ function applyHeading(marker) {
   if (tt) { tt.options.offset = L.point(0, up ? -34 : 0); if (tt.isOpen()) tt.update(); }
 }
 
-// Flechas pequeñas a lo largo de una línea, cada ARROW_SPACING_M, apuntando en el sentido del recorrido
-function arrowIcon(deg, color) {
-  return L.divIcon({
-    className: "",
-    html: `<div class="trail-arrow" style="--hd:${Math.round(deg)}deg;--c:${color}"><svg viewBox="0 0 24 24"><path d="M12 3 21 21 12 16 3 21z"/></svg></div>`,
-    iconSize: [18, 18], iconAnchor: [9, 9],
-  });
-}
-function arrowsAlong(points, color) {
-  const pts = points.map(asLatLon);
-  const out = [];
-  if (pts.length < 2) return out;
-  let total = 0;
-  for (let i = 1; i < pts.length; i++) total += distM(pts[i - 1], pts[i]);
-  const step = Math.max(ARROW_SPACING_M, total / ARROW_MAX);
-  let next = step / 2, acc = 0;
-  for (let i = 1; i < pts.length; i++) {
-    const a = pts[i - 1], b = pts[i], d = distM(a, b);
-    if (d < 1) continue;
-    while (acc + d >= next) {
-      const f = (next - acc) / d;
-      const p = [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f];
-      out.push(L.marker(p, { icon: arrowIcon(bearingDeg(a, b), color), interactive: false, keyboard: false }));
-      next += step;
-    }
-    acc += d;
-  }
-  return out;
-}
-
-// Actualiza la flecha del marcador y (con un pequeño retraso, para no redibujar en cada trama) las de la línea
-function syncDirection(b, now = false) {
-  const pts = b.trail.getLatLngs();
-  setHeading(b.marker, headingOf(pts));
-  clearTimeout(b.arrowTimer);
-  b.arrowTimer = setTimeout(() => {
-    b.arrows.clearLayers();
-    arrowsAlong(b.trail.getLatLngs(), b.color).forEach((m) => b.arrows.addLayer(m));
-  }, now ? 0 : 1500);
+// Actualiza la flecha del marcador con el recorrido que lleva el bus
+function syncDirection(b) {
+  setHeading(b.marker, headingOf(b.trail.getLatLngs()));
 }
 
 // Encuadra el mapa para que se vean todos los buses con su recorrido

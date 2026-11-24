@@ -29,8 +29,6 @@ function drawRoute(route) {
     run.push([pts[i].lat, pts[i].lon]);
   }
   flush();
-  // Flechas con el sentido del recorrido (también sobre los tramos estimados)
-  arrowsAlong(pts.map((p) => [p.lat, p.lon]), route.color).forEach((m) => m.addTo(route.polyline));
 
   if (route.points.length > 0) {
     const first = route.points[0];
@@ -140,7 +138,7 @@ function updateHistoryViewState() {
   }
 
   if (anyRouteVisible()) {
-    busList().forEach((b) => { b.trail.setLatLngs([]); b.arrows.clearLayers(); });
+    busList().forEach((b) => b.trail.setLatLngs([]));
     const visiblePolylines = [...routesBySession.values()].filter((r) => r.visible && r.polyline).map((r) => r.polyline);
     if (visiblePolylines.length > 0) {
       map.fitBounds(L.featureGroup(visiblePolylines).getBounds(), { maxZoom: 15, padding: [20, 20] });
